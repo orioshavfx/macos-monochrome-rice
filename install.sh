@@ -87,6 +87,24 @@ run_long() {
     return 1
 }
 
+# fetch_source "what" ARCHIVE_URL GIT_URL REV DEST: unpacks the pinned revision
+# into DEST. It downloads the tarball with curl, which has connect and total
+# timeouts (git has no connect timeout, and a clone once hung for minutes with
+# no output). If that fails, it falls back to git clone.
+fetch_source() {
+    local what="$1" archive="$2" git_url="$3" rev="$4" dest="$5"
+    local tgz="$WORK/$(basename "$dest").tar.gz"
+    mkdir -p "$dest" || return 1
+    if run_long "downloading $what" curl -fL --connect-timeout 20 --max-time 600 --retry 2 -o "$tgz" "$archive" \
+        && tar -xzf "$tgz" -C "$dest" --strip-components=1; then
+        return 0
+    fi
+    warn "downloading $what failed; falling back to git clone"
+    rm -rf "$dest"
+    run_long "cloning $what" env GIT_TERMINAL_PROMPT=0 git "${GIT_NET[@]}" clone --quiet "$git_url" "$dest" || return 1
+    run "checking out $what $rev" git -C "$dest" -c advice.detachedHead=false checkout --quiet "$rev"
+}
+
 need() {
     command -v "$1" >/dev/null 2>&1 || die "$1 not found; $2"
 }
@@ -240,8 +258,7 @@ step "Building cberry (cranberry window manager, patched for non-Latin layouts)"
 need git "it comes with the Xcode Command Line Tools."
 need cargo "it should have been installed by brew bundle (rust)."
 src="$WORK/cranberry"
-run_long "cloning cranberry" env GIT_TERMINAL_PROMPT=0 git "${GIT_NET[@]}" clone --quiet "$CRANBERRY_URL" "$src" || exit 1
-run "checking out cranberry $CRANBERRY_REV" git -C "$src" -c advice.detachedHead=false checkout --quiet "$CRANBERRY_REV"
+fetch_source "cranberry" "https://github.com/emreekici3/cranberry/archive/$CRANBERRY_REV.tar.gz" "$CRANBERRY_URL" "$CRANBERRY_REV" "$src" || exit 1
 run "applying patches/cranberry-latin-layout.patch" git -C "$src" apply "$REPO_DIR/patches/cranberry-latin-layout.patch"
 run_long "cargo build of cberry" cargo build --release --manifest-path "$src/Cargo.toml" || exit 1
 install_binary "$src/target/release/cberry" cberry
@@ -251,8 +268,7 @@ run "codesign cberry" codesign --force --sign - "$BIN_DIR/cberry"
 step "Building AppleMusicTUI (musicplayer, monochrome + lyrics patch)"
 need go "it should have been installed by brew bundle."
 src="$WORK/AppleMusicTUI"
-run_long "cloning AppleMusicTUI" env GIT_TERMINAL_PROMPT=0 git "${GIT_NET[@]}" clone --quiet "$AMT_URL" "$src" || exit 1
-run "checking out AppleMusicTUI $AMT_REV" git -C "$src" -c advice.detachedHead=false checkout --quiet "$AMT_REV"
+fetch_source "AppleMusicTUI" "https://github.com/sebasreateguib/AppleMusicTUI/archive/$AMT_REV.tar.gz" "$AMT_URL" "$AMT_REV" "$src" || exit 1
 run "applying patches/applemusictui.patch" git -C "$src" apply "$REPO_DIR/patches/applemusictui.patch"
 run_long "go build of AppleMusicTUI" go -C "$src" build -o "$WORK/musicplayer" . || exit 1
 install_binary "$WORK/musicplayer" musicplayer
@@ -262,7 +278,7 @@ step "Building sysviz $SYSVIZ_TAG"
 if [ "$SYSVIZ_SUPPORTED" -eq 1 ]; then
     need swift "it comes with the Xcode Command Line Tools."
     src="$WORK/sysviz"
-    run_long "cloning sysviz" env GIT_TERMINAL_PROMPT=0 git "${GIT_NET[@]}" -c advice.detachedHead=false clone --quiet --depth 1 --branch "$SYSVIZ_TAG" "$SYSVIZ_URL" "$src" || exit 1
+    fetch_source "sysviz" "https://github.com/orioshavfx/sysviz/archive/refs/tags/$SYSVIZ_TAG.tar.gz" "$SYSVIZ_URL" "$SYSVIZ_TAG" "$src" || exit 1
     run_long "swift build of sysviz" swift build -c release --package-path "$src" || exit 1
     sysviz_bin="$(cd "$src" && swift build -c release --show-bin-path)/sysviz" || die "swift build --show-bin-path failed"
     install_binary "$sysviz_bin" sysviz
