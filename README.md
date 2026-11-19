@@ -8,7 +8,7 @@ A monochrome macOS terminal setup: black, white and greys only.
 - **sysviz**: audio visualizer for the terminal
 - **fastfetch**: grey system info
 - **rice-settings**: a small native app to change all of the above (Opt+U or `setup`)
-- **AppleMusicTUI** (`musicplayer`): Apple Music in the terminal, recoloured white, with a lyrics view (`l`)
+- **AppleMusicTUI** (`musicplayer`): Apple Music in the terminal, recoloured white, with a lyrics view (`l`); start it with `am`
 
 macOS only. sysviz needs macOS 14.2 or newer.
 
