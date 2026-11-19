@@ -1,5 +1,3 @@
-tap "teamookla/speedtest"
-
 brew "fish"
 brew "fastfetch"
 brew "cmatrix"
@@ -12,7 +10,6 @@ brew "neovim"
 brew "ripgrep"
 brew "zoxide"
 brew "mole"
-brew "teamookla/speedtest/speedtest"
 brew "go"
 brew "rust"
 

@@ -14,7 +14,6 @@ fastfetch
 alias cleanup='clear; mole'
 alias cat='bat'
 alias ls='lsd'
-alias st='speedtest'
 alias info='fastfetch'
 alias am='musicplayer'
 alias q='exit'
