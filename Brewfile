@@ -12,6 +12,7 @@ brew "ripgrep"
 brew "zoxide"
 brew "mole"
 brew "teamookla/speedtest/speedtest"
+brew "go"
 brew "rust"
 
 cask "kitty"

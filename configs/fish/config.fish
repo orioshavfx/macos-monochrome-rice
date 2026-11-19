@@ -1,5 +1,5 @@
 set -g fish_greeting
-# Homebrew and ~/bin (cberry, musictui, sysviz) on PATH.
+# Homebrew and ~/bin (cberry, musicplayer, sysviz) on PATH.
 for brew_bin in /opt/homebrew/bin /usr/local/bin
     if test -x $brew_bin/brew
         fish_add_path -g (path dirname $brew_bin)/bin (path dirname $brew_bin)/sbin

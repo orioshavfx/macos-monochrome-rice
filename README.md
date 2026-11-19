@@ -8,7 +8,7 @@ A monochrome macOS terminal setup: black, white and greys only.
 - **sysviz**: audio visualizer for the terminal
 - **fastfetch**: grey system info
 - **rice-settings**: a small native app to change all of the above (Opt+U or `setup`)
-- **musictui** (`apps/musictui`, Rust): terminal player for Music.app. Playlists, transport, shuffle, repeat, its own queue, fullscreen and pixel cover art; everything is set in `~/.config/musictui/config.toml`
+- **AppleMusicTUI** (`musicplayer`): Apple Music in the terminal, recoloured white, with a lyrics view (`l`)
 
 macOS only. sysviz needs macOS 14.2 or newer.
 
@@ -27,10 +27,10 @@ The script is safe to run again. It may ask for your password (Homebrew installe
 | --- | --- |
 | Xcode Command Line Tools (if missing; the script stops, run it again afterwards) | system |
 | Homebrew (if missing, official installer from brew.sh) | `/opt/homebrew` |
-| Brewfile: fish, fastfetch, cmatrix, bat, fd, lsd, btop, neovim, ripgrep, zoxide, mole, speedtest (Ookla tap), rust; casks kitty, zotero, font-hasklug-nerd-font | Homebrew |
+| Brewfile: fish, fastfetch, cmatrix, bat, fd, lsd, btop, neovim, ripgrep, zoxide, mole, speedtest (Ookla tap), go, rust; casks kitty, zotero, font-hasklug-nerd-font | Homebrew |
 | fisher (fetched from GitHub) and the plugins in `configs/fish/fish_plugins` | `~/.config/fish` |
 | `cberry`, built from cranberry `42b5ed9` + `patches/cranberry-latin-layout.patch` | `~/bin/cberry` |
-| `musictui`, built from `apps/musictui` (Rust) | `~/bin/musictui`; config `~/.config/musictui/config.toml` |
+| `musicplayer`, built from AppleMusicTUI `eb796cc` + `patches/applemusictui.patch` | `~/bin/musicplayer` |
 | `sysviz`, built from sysviz `v0.2.0` | `~/bin/sysviz` |
 | Rice Settings app (sources in `rice-settings/`) | `~/Applications/rice-settings.app`, sources in `~/bin/rice-settings` |
 | `configs/kitty`, `fish`, `cranberry`, `fastfetch`, `sysviz`, `rice-settings` | `~/.config/<name>/` |
@@ -46,17 +46,9 @@ Existing files that differ are saved first as `<file>.bak-<timestamp>`. Nothing 
 3. **Font.** kitty uses Hasklug Nerd Font (installed by the Brewfile). To use another one, change `font_family` in `~/.config/kitty/kitty.conf` or pick it in Rice Settings.
 4. Open kitty, then press Opt+U or type `setup`.
 
-On first use macOS also asks to let your terminal capture system audio (sysviz) and control Music (musictui). The `speedtest` alias asks you to accept Ookla's license once. musictui reads the artwork from Music.app and sends nothing to other services.
+On first use macOS also asks to let your terminal capture system audio (sysviz) and control Music (musicplayer). The `speedtest` alias asks you to accept Ookla's license once. The lyrics view sends the track title and artist to [lrclib.net](https://lrclib.net).
 
 The `alt - w` bind in `cberryrc` opens `~/bin/wallpicker`, which is not part of this repo; without it the key does nothing.
-
-## musictui
-
-```sh
-musictui    # in a terminal; press q to quit
-```
-
-Settings are in `~/.config/musictui/config.toml`: accent colour, whether fullscreen starts on, refresh rate and every key. A misspelled key or an old option such as `show_lyrics` is reported at start-up; delete that line to fix it. The cover is drawn in the artwork's own colours, as half-block pixels. Music.app must be running and signed in to Apple Music for playback to work. musictui does not search the catalogue: it works with playlists and tracks already in your library.
 
 ## Rice Settings
 
@@ -71,7 +63,7 @@ Or build it by hand: `sh ~/bin/rice-settings/build.sh`.
 
 ```sh
 ~/bin/cberry stop; ~/bin/cberry uninstall
-rm ~/bin/cberry ~/bin/musictui ~/bin/sysviz
+rm ~/bin/cberry ~/bin/musicplayer ~/bin/sysviz
 rm -rf ~/Applications/rice-settings.app ~/bin/rice-settings ~/.local/state/monochrome-macos-rice
 ```
 
@@ -87,7 +79,7 @@ Homebrew packages stay; remove them with `brew uninstall` if you like.
 ## Credits
 
 - [cranberry](https://github.com/emreekici3/cranberry) by emreekici3, MIT
-- musictui is a from-scratch Rust rewrite, inspired by [AppleMusicTUI](https://github.com/sebasreateguib/AppleMusicTUI) by Sebastian Reategui (MIT). No code was copied from it.
+- [AppleMusicTUI](https://github.com/sebasreateguib/AppleMusicTUI) by Sebastian Reategui, MIT
 - [sysviz](https://github.com/orioshavfx/sysviz) by orioshavfx, MIT
 - [fisher](https://github.com/jorgebucaran/fisher) by Jorge Bucaran, MIT
 

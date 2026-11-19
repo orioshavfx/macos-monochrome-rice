@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn shipped_example_config_is_valid() {
         // The example copied to ~/.config by install.sh must always load with this code.
-        let text = include_str!("../../../configs/musictui/config.toml");
+        let text = include_str!("../config.example.toml");
         let c: Config = toml::from_str(text).expect("example config parses");
         KeyMap::from_config(&c.keys).expect("example keys resolve");
         c.accent_color().expect("example accent is valid");

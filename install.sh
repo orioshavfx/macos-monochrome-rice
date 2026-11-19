@@ -14,6 +14,8 @@ STATE_DIR="$HOME/.local/state/monochrome-macos-rice"
 
 CRANBERRY_URL="https://github.com/emreekici3/cranberry.git"
 CRANBERRY_REV="42b5ed9"
+AMT_URL="https://github.com/sebasreateguib/AppleMusicTUI.git"
+AMT_REV="eb796cc"
 SYSVIZ_URL="https://github.com/orioshavfx/sysviz.git"
 SYSVIZ_TAG="v0.2.0"
 FISHER_URL="https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish"
@@ -191,13 +193,14 @@ install_binary "$src/target/release/cberry" cberry
 run "codesign cberry" codesign --force --sign - "$BIN_DIR/cberry"
 
 # ---------------------------------------------------------------------------
-step "Building musictui (terminal player for Music.app, from apps/musictui)"
-need cargo "it should have been installed by brew bundle (rust)."
-src="$WORK/musictui"
-run "copying apps/musictui" cp -R "$REPO_DIR/apps/musictui" "$src"
-(cd "$src" && cargo build --release) || die "cargo build --release of musictui failed"
-install_binary "$src/target/release/musictui" musictui
-run "codesign musictui" codesign --force --sign - "$BIN_DIR/musictui"
+step "Building AppleMusicTUI (musicplayer, monochrome + lyrics patch)"
+need go "it should have been installed by brew bundle."
+src="$WORK/AppleMusicTUI"
+run "cloning $AMT_URL" git clone --quiet "$AMT_URL" "$src"
+run "checking out AppleMusicTUI $AMT_REV" git -C "$src" -c advice.detachedHead=false checkout --quiet "$AMT_REV"
+run "applying patches/applemusictui.patch" git -C "$src" apply "$REPO_DIR/patches/applemusictui.patch"
+(cd "$src" && go build -o "$WORK/musicplayer" .) || die "go build of AppleMusicTUI failed"
+install_binary "$WORK/musicplayer" musicplayer
 
 # ---------------------------------------------------------------------------
 step "Building sysviz $SYSVIZ_TAG"
@@ -267,7 +270,6 @@ while IFS= read -r -d '' file; do
         cranberry)     target="$HOME/.config/cranberry/$rest" ;;
         fastfetch)     target="$HOME/.config/fastfetch/$rest" ;;
         sysviz)        target="$HOME/.config/sysviz/$rest" ;;
-        musictui)      target="$HOME/.config/musictui/$rest" ;;
         rice-settings) target="$HOME/.config/rice-settings/$rest" ;;
         bin)           target="$HOME/bin/$rest" ;;
         *) die "configs/$rel: no target known for configs/$top" ;;
