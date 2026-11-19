@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>monochrome-macos-rice</title>
+<meta name="description" content="A black, white and grey terminal setup for macOS. Clone it, run one script.">
+<style>
+  :root {
+    --bg: #0b0b0b;
+    --fg: #f2f2f2;
+    --muted: #8a8a8a;
+    --line: #262626;
+    --card: #141414;
+    --code: #1c1c1c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6; }
+  a { color: var(--fg); }
+  main { max-width: 980px; margin: 0 auto; padding: 56px 24px 80px; }
+  header h1 { font-size: 44px; margin: 0 0 8px; letter-spacing: -0.02em; font-weight: 700; }
+  header p { color: var(--muted); font-size: 18px; margin: 0 0 28px; }
+  .shot { margin: 28px 0 8px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .shot img { display: block; width: 100%; height: auto; }
+  .caption { color: var(--muted); font-size: 14px; margin: 0 0 40px; }
+  h2 { font-size: 22px; margin: 48px 0 16px; letter-spacing: -0.01em; }
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  code { background: var(--code); padding: 2px 6px; border-radius: 6px; font-size: 14px; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px;
+    overflow-x: auto; font-size: 15px; }
+  ol, ul { padding-left: 22px; color: var(--muted); }
+  ol li, ul li { margin: 6px 0; }
+  ol li strong, ul li strong { color: var(--fg); font-weight: 600; }
+  .note { border-left: 2px solid var(--line); padding: 4px 0 4px 16px; color: var(--muted); font-size: 15px; }
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>monochrome-macos-rice</h1>
+    <p>A black, white and grey terminal setup for macOS. Clone it, run one script.</p>
+  </header>
+
+  <div class="shot"><img src="img/overview.png" alt="The rice: btop, fastfetch in kitty and Claude Code"></div>
+  <p class="caption">btop, fastfetch and Claude Code, all in greys.</p>
+
+  <div class="shot"><img src="img/music-and-cmatrix.png" alt="Terminal setup: Apple Music in the terminal, cmatrix, sysviz and tty-clock"></div>
+  <p class="caption">Apple Music in the terminal, cmatrix, sysviz and tty-clock, all in greys.</p>
+
+  <h2>What's inside</h2>
+  <div class="features">
+    <div class="card">
+      <h3>kitty</h3>
+      <p>Hasklug Nerd Font, 75% background opacity, grey theme.</p>
+    </div>
+    <div class="card">
+      <h3>fish</h3>
+      <p>fastfetch on start, and short aliases: <code>ls</code> runs lsd, <code>cat</code> runs bat, <code>grep</code> runs rg, <code>am</code> starts the music player.</p>
+    </div>
+    <div class="card">
+      <h3>cberry</h3>
+      <p>A tiling window manager built from cranberry. Patched so its shortcuts still work while a non-Latin keyboard layout (such as Russian) is active. Runs as a login service.</p>
+    </div>
+    <div class="card">
+      <h3>sysviz</h3>
+      <p>A terminal audio visualizer. Needs macOS 14.2 or newer.</p>
+    </div>
+    <div class="card">
+      <h3>fastfetch</h3>
+      <p>System info in greys.</p>
+    </div>
+    <div class="card">
+      <h3>Rice Settings</h3>
+      <p>A small native app for the look and the cberry rules. Opens with Opt+U or <code>setup</code>.</p>
+    </div>
+    <div class="card">
+      <h3>AppleMusicTUI</h3>
+      <p>Apple Music in the terminal (<code>musicplayer</code>, started with <code>am</code>), recoloured white, with a lyrics view (<code>l</code>).</p>
+    </div>
+    <div class="card">
+      <h3>Safe to re-run</h3>
+      <p>Unchanged files are skipped, changed ones are backed up first. Nothing is deleted.</p>
+    </div>
+    <div class="card">
+      <h3>Visible progress</h3>
+      <p>Long builds show a live status line. Full logs go to <code>~/.local/state/monochrome-macos-rice/logs</code>.</p>
+    </div>
+  </div>
+
+  <h2>Install</h2>
+  <pre><code>git clone https://github.com/orioshavfx/monochrome-macos-rice.git
+cd monochrome-macos-rice &amp;&amp; ./install.sh</code></pre>
+  <p class="note">macOS only. The script installs Xcode Command Line Tools and Homebrew if they are missing. It may ask for your password.</p>
+
+  <h2>Two steps by hand</h2>
+  <ol>
+    <li><strong>Accessibility for cberry.</strong> System Settings → Privacy &amp; Security → Accessibility: add <code>~/bin/cberry</code>, then run <code>cberry restart</code>. After each rebuild of the rice, do this again.</li>
+    <li><strong>Hide Others shortcut.</strong> Reassign Cmd+Opt+H (macOS Hide Others), which clashes with the cberry resize binds.</li>
+  </ol>
+
+  <h2>Privacy</h2>
+  <p class="note">The lyrics view sends the track title and artist to <a href="https://lrclib.net">lrclib.net</a>.</p>
+
+  <h2>Credits</h2>
+  <ul>
+    <li><a href="https://github.com/emreekici3/cranberry">cranberry</a> by emreekici3, MIT</li>
+    <li><a href="https://github.com/sebasreateguib/AppleMusicTUI">AppleMusicTUI</a> by Sebastian Reategui, MIT</li>
+    <li><a href="https://github.com/orioshavfx/sysviz">sysviz</a> by orioshavfx, MIT</li>
+    <li><a href="https://github.com/jorgebucaran/fisher">fisher</a> by Jorge Bucaran, MIT</li>
+  </ul>
+
+  <footer>
+    This repo is MIT licensed, see <a href="https://github.com/orioshavfx/monochrome-macos-rice/blob/main/LICENSE">LICENSE</a>.
+  </footer>
+</main>
+</body>
+</html>
