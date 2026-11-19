@@ -15,7 +15,7 @@ macOS only. sysviz needs macOS 14.2 or newer.
 ## Install
 
 ```sh
-git clone https://github.com/orioshavfx/monochrome-macos-rice.git
+git clone https://github.com/orioshavfx/macos-monochrome-rice.git
 cd monochrome-macos-rice && ./install.sh
 ```
 
