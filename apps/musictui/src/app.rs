@@ -51,6 +51,10 @@ pub struct App {
     pub cover: Option<RgbImage>,
     /// Title of the track `cover` belongs to, to reload it when the track changes.
     cover_title: Option<String>,
+    /// Why there is no cover (no artwork, or the error), shown where the cover goes.
+    pub cover_note: Option<String>,
+    /// Why the track list is empty when loading failed. Stays until a load succeeds.
+    pub tracks_error: Option<String>,
 
     pub fullscreen: bool,
     pub focus: Focus,
@@ -75,6 +79,8 @@ pub struct App {
 
 fn key_matches(spec: KeySpec, key: &KeyEvent) -> bool {
     match spec {
+        // '+' is Shift+'=' on the same key, so the unshifted '=' counts as '+' too.
+        KeySpec::Char('+') => matches!(key.code, KeyCode::Char('+') | KeyCode::Char('=')),
         KeySpec::Char(c) => key.code == KeyCode::Char(c),
         KeySpec::Space => key.code == KeyCode::Char(' '),
         KeySpec::Enter => key.code == KeyCode::Enter,
@@ -106,6 +112,8 @@ impl App {
             now: None,
             cover: None,
             cover_title: None,
+            cover_note: None,
+            tracks_error: None,
             fullscreen: cfg.view.start_fullscreen,
             focus: Focus::Playlists,
             playlists: Vec::new(),
@@ -171,19 +179,23 @@ impl App {
         self.load_selected_playlist_tracks();
     }
 
-    /// Load the artwork of the current track. Tracks without artwork get no cover.
+    /// Load the artwork of the current track. Keeps the reason when there is no cover.
     fn refresh_cover(&mut self) {
         self.cover_title = self.now.as_ref().map(|n| n.title.clone());
         self.cover = None;
+        self.cover_note = None;
         if self.now.is_none() {
             return;
         }
-        let has_art = self.report(music::fetch_cover()).unwrap_or(false);
-        if has_art {
-            self.cover = self.report(cover::load(
-                Path::new(music::RAW_COVER_PATH),
-                Path::new(COVER_PNG),
-            ));
+        match music::fetch_cover() {
+            Ok(true) => match cover::load(Path::new(music::RAW_COVER_PATH), Path::new(COVER_PNG)) {
+                Ok(img) => self.cover = Some(img),
+                Err(e) => self.cover_note = Some(format!("{e:#}")),
+            },
+            Ok(false) => {
+                self.cover_note = Some("Music.app has no artwork for this track".into());
+            }
+            Err(e) => self.cover_note = Some(format!("{e:#}")),
         }
     }
 
@@ -199,14 +211,25 @@ impl App {
         if self.tracks_of.as_deref() == Some(name.as_str()) {
             return;
         }
-        if let Some(rows) = self.report(music::playlist_tracks(&name)) {
-            self.tracks = rows;
-            self.tracks_of = Some(name);
-            self.track_state.select(if self.tracks.is_empty() {
-                None
-            } else {
-                Some(0)
-            });
+        match music::playlist_tracks(&name) {
+            Ok(rows) => {
+                self.tracks_error = None;
+                self.tracks = rows;
+                self.tracks_of = Some(name);
+                self.track_state.select(if self.tracks.is_empty() {
+                    None
+                } else {
+                    Some(0)
+                });
+            }
+            Err(e) => {
+                // Keep the error in the track panel. `tracks_of` stays unset so the
+                // next cursor pause retries this playlist.
+                self.tracks.clear();
+                self.tracks_of = None;
+                self.track_state.select(None);
+                self.tracks_error = Some(format!("{e:#}"));
+            }
         }
     }
 
@@ -543,6 +566,16 @@ mod tests {
         a.tracks_pending = Some(Instant::now() - Duration::from_secs(1));
         a.flush_pending();
         assert!(a.tracks_pending.is_none());
+    }
+
+    #[test]
+    fn plus_key_also_accepts_plain_equals() {
+        let plus = KeySpec::Char('+');
+        assert!(key_matches(plus, &press(KeyCode::Char('+'))));
+        assert!(key_matches(plus, &press(KeyCode::Char('='))));
+        assert!(!key_matches(plus, &press(KeyCode::Char('-'))));
+        // Other characters still match only themselves.
+        assert!(!key_matches(KeySpec::Char('n'), &press(KeyCode::Char('='))));
     }
 
     #[test]

@@ -3,7 +3,7 @@
 
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Gauge, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Wrap},
 };
 
 use crate::app::{App, Focus};
@@ -123,6 +123,21 @@ fn draw_playlists(frame: &mut Frame, app: &App, area: Rect) {
 
 fn draw_tracks(frame: &mut Frame, app: &App, area: Rect) {
     let title = app.tracks_of.as_deref().unwrap_or("Tracks");
+    // Say why the list is empty instead of showing a blank panel.
+    if app.tracks.is_empty() {
+        if let Some(err) = app.tracks_error.as_deref() {
+            let p = Paragraph::new(format!("Could not read this playlist:\n{err}"))
+                .block(block(title, app))
+                .wrap(Wrap { trim: true });
+            frame.render_widget(p, area);
+            return;
+        }
+        if app.tracks_of.is_some() {
+            let p = Paragraph::new("This playlist has no tracks.").block(block(title, app));
+            frame.render_widget(p, area);
+            return;
+        }
+    }
     let items: Vec<ListItem> = app
         .tracks
         .iter()
@@ -146,7 +161,7 @@ fn draw_tracks(frame: &mut Frame, app: &App, area: Rect) {
 /// Splits `area` into a cover column and the text area. Without artwork the
 /// text gets the whole area.
 fn with_cover(app: &App, area: Rect) -> (Option<Rect>, Rect) {
-    if app.cover.is_none() {
+    if app.cover.is_none() && app.cover_note.is_none() {
         return (None, area);
     }
     let cover_w = (area.height * 2).min(area.width / 2);
@@ -165,8 +180,17 @@ fn draw_now_playing(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(now_block, area);
 
     let (cover_area, text_area) = with_cover(app, inner);
-    if let (Some(cover_area), Some(img)) = (cover_area, app.cover.as_ref()) {
-        frame.render_widget(PixelCover { img }, cover_area);
+    if let Some(cover_area) = cover_area {
+        match app.cover.as_ref() {
+            Some(img) => frame.render_widget(PixelCover { img }, cover_area),
+            None => {
+                let note = app.cover_note.as_deref().unwrap_or("");
+                let p = Paragraph::new(note)
+                    .style(Style::default().dim())
+                    .wrap(Wrap { trim: true });
+                frame.render_widget(p, cover_area);
+            }
+        }
     }
 
     let Some(now) = app.now.as_ref() else {
@@ -463,5 +487,22 @@ mod render_tests {
         app.fullscreen = true;
         let _ = render(&app, 100, 30);
         let _ = render(&app, 20, 8);
+    }
+
+    #[test]
+    fn track_load_error_is_shown_in_the_track_panel() {
+        let mut app = app_with(vec![]);
+        app.tracks_error = Some("osascript: boom".into());
+        let text = render(&app, 100, 30);
+        assert!(text.contains("Could not read this playlist"));
+        assert!(text.contains("osascript: boom"));
+    }
+
+    #[test]
+    fn missing_artwork_reason_is_shown_where_the_cover_goes() {
+        let mut app = app_with(vec![]);
+        app.cover_note = Some("Music.app has no artwork for this track".into());
+        let text = render(&app, 100, 30);
+        assert!(text.contains("Music.app has no"));
     }
 }
