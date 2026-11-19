@@ -1,0 +1,31 @@
+# musictui configuration. Any key you leave out keeps its default.
+# A misspelled key is an error: musictui tells you which file and key is wrong.
+
+[view]
+# Accent colour for borders, the selection and the progress bar (#rrggbb).
+accent = "#ffffff"
+# Show the lyrics panel when musictui starts (toggle it with `l`).
+show_lyrics = false
+# Start in fullscreen mode: now playing only, no playlists.
+start_fullscreen = false
+# How often the player state is refreshed, in milliseconds (minimum 100).
+poll_ms = 1000
+
+[keys]
+# Keys are one character (e.g. "n", "+") or one of: space, enter, tab, left, right, up, down, esc.
+play_pause = "space"
+next = "n"
+previous = "p"
+shuffle = "s"
+repeat = "r"
+volume_up = "+"
+volume_down = "-"
+seek_forward = "right"
+seek_back = "left"
+fullscreen = "f"
+lyrics = "l"
+focus_next = "tab"
+up = "k"
+down = "j"
+select = "enter"
+quit = "q"

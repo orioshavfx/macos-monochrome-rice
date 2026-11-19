@@ -1,0 +1,17 @@
+[package]
+name = "musictui"
+version = "0.1.0"
+edition = "2021"
+description = "Terminal Apple Music player for macOS, driven by Music.app over AppleScript"
+license = "MIT"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+anyhow = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
