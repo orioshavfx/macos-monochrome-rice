@@ -11,6 +11,9 @@ APP_DIR="$HOME/Applications"
 # Marks what this script installed, so a later run replaces its own builds
 # without backing them up, but still backs up anything that was there before.
 STATE_DIR="$HOME/.local/state/monochrome-macos-rice"
+# Full output of every long build or install goes here, one file per run.
+LOG_DIR="$STATE_DIR/logs"
+START_TIME="$(date +%s)"
 
 CRANBERRY_URL="https://github.com/emreekici3/cranberry.git"
 CRANBERRY_REV="42b5ed9"
@@ -21,15 +24,65 @@ SYSVIZ_TAG="v0.2.0"
 FISHER_URL="https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish"
 BREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 
-step() { printf '\n==> %s\n' "$*"; }
+# Steps are the top-level `step "..."` lines of this file; count them for "[n/N]".
+STEP_TOTAL="$(grep -c '^step "' "${BASH_SOURCE[0]}" || true)"
+STEP_NO=0
+step() {
+    STEP_NO=$((STEP_NO + 1))
+    printf '\n==> [%s/%s] %s\n' "$STEP_NO" "$STEP_TOTAL" "$*"
+}
 info() { printf '    %s\n' "$*"; }
 warn() { printf '    warning: %s\n' "$*" >&2; }
 die()  { printf '\nerror: %s\n' "$*" >&2; exit 1; }
+
+# fmt_secs N: 125 -> 2m05s
+fmt_secs() { printf '%dm%02ds' $(( $1 / 60 )) $(( $1 % 60 )); }
 
 # run "what" command args...: runs the command, exits with a message naming it on failure.
 run() {
     local what="$1"; shift
     "$@" || die "$what failed (command: $*)"
+}
+
+# run_long "what" command args...: for builds and installs that take minutes.
+# The output goes to a log file instead of the screen. Every 10 seconds a line
+# shows the elapsed time and the newest line of output, so a slow step is
+# visibly alive. After 2 minutes without new output it warns, because the step
+# may be waiting for input. On failure it prints the end of the log and returns 1;
+# callers write `run_long ... || exit 1`.
+run_long() {
+    local what="$1"; shift
+    local slug log start pid rc secs last size prev=0 idle=0 ticks=0
+    slug="$(tr -cs 'A-Za-z0-9' '-' <<<"$what")"
+    mkdir -p "$LOG_DIR" || { warn "cannot create $LOG_DIR"; return 1; }
+    log="$LOG_DIR/$slug-$STAMP.log"
+    start="$(date +%s)"
+    info "started: $what (full log: $log)"
+    "$@" >"$log" 2>&1 &
+    pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep 1
+        ticks=$((ticks + 1))
+        [ $((ticks % 10)) -eq 0 ] || continue
+        size="$(wc -c <"$log" | tr -d ' ')"
+        if [ "$size" = "$prev" ]; then idle=$((idle + 10)); else idle=0; fi
+        prev="$size"
+        last="$(tail -n 1 "$log" 2>/dev/null | tr -d '\r\033' | cut -c1-100)"
+        info "$(fmt_secs $(( $(date +%s) - start ))) $what: still running${last:+ (last line: $last)}"
+        if [ "$idle" -eq 120 ]; then
+            warn "$what: no new output for 2 minutes. It may be downloading a large file, compiling, or waiting for input. Log: $log"
+        fi
+    done
+    if wait "$pid"; then rc=0; else rc=$?; fi
+    secs=$(( $(date +%s) - start ))
+    if [ "$rc" -eq 0 ]; then
+        info "$what: done in $(fmt_secs "$secs")"
+        return 0
+    fi
+    printf '\n    last lines of %s:\n' "$log" >&2
+    tail -n 30 "$log" | tr -d '\r\033' | sed 's/^/    | /' >&2
+    printf '\nerror: %s failed after %s (exit %s). Full log: %s\n' "$what" "$(fmt_secs "$secs")" "$rc" "$log" >&2
+    return 1
 }
 
 need() {
@@ -154,7 +207,7 @@ fi
 
 # ---------------------------------------------------------------------------
 step "Homebrew packages (Brewfile)"
-run "brew bundle" brew bundle --file="$REPO_DIR/Brewfile"
+run_long "brew bundle" brew bundle --file="$REPO_DIR/Brewfile" || exit 1
 
 # ---------------------------------------------------------------------------
 step "fish plugins (fisher)"
@@ -163,7 +216,7 @@ if [ -f "$PLUGINS_FILE" ]; then
     need fish "it should have been installed by brew bundle."
     if ! fish -c 'type -q fisher' >/dev/null 2>&1; then
         info "fetching fisher from GitHub: $FISHER_URL"
-        run "installing fisher" fish -c "curl -fsSL $FISHER_URL | source && fisher install jorgebucaran/fisher"
+        run_long "installing fisher" fish -c "curl -fsSL $FISHER_URL | source && fisher install jorgebucaran/fisher" || exit 1
     fi
     installed_plugins="$(fish -c 'fisher list' 2>/dev/null || true)"
     while IFS= read -r plugin || [ -n "$plugin" ]; do
@@ -173,7 +226,7 @@ if [ -f "$PLUGINS_FILE" ]; then
         if grep -qxF "$plugin" <<<"$installed_plugins"; then
             info "already installed  $plugin"
         else
-            run "fisher install $plugin" fish -c "fisher install $plugin"
+            run_long "fisher install $plugin" fish -c "fisher install $plugin" || exit 1
         fi
     done <"$PLUGINS_FILE"
 else
@@ -188,7 +241,7 @@ src="$WORK/cranberry"
 run "cloning $CRANBERRY_URL" git clone --quiet "$CRANBERRY_URL" "$src"
 run "checking out cranberry $CRANBERRY_REV" git -C "$src" -c advice.detachedHead=false checkout --quiet "$CRANBERRY_REV"
 run "applying patches/cranberry-latin-layout.patch" git -C "$src" apply "$REPO_DIR/patches/cranberry-latin-layout.patch"
-(cd "$src" && cargo build --release) || die "cargo build --release of cranberry failed"
+run_long "cargo build of cberry" cargo build --release --manifest-path "$src/Cargo.toml" || exit 1
 install_binary "$src/target/release/cberry" cberry
 run "codesign cberry" codesign --force --sign - "$BIN_DIR/cberry"
 
@@ -199,7 +252,7 @@ src="$WORK/AppleMusicTUI"
 run "cloning $AMT_URL" git clone --quiet "$AMT_URL" "$src"
 run "checking out AppleMusicTUI $AMT_REV" git -C "$src" -c advice.detachedHead=false checkout --quiet "$AMT_REV"
 run "applying patches/applemusictui.patch" git -C "$src" apply "$REPO_DIR/patches/applemusictui.patch"
-(cd "$src" && go build -o "$WORK/musicplayer" .) || die "go build of AppleMusicTUI failed"
+run_long "go build of AppleMusicTUI" go -C "$src" build -o "$WORK/musicplayer" . || exit 1
 install_binary "$WORK/musicplayer" musicplayer
 
 # ---------------------------------------------------------------------------
@@ -208,7 +261,7 @@ if [ "$SYSVIZ_SUPPORTED" -eq 1 ]; then
     need swift "it comes with the Xcode Command Line Tools."
     src="$WORK/sysviz"
     run "cloning $SYSVIZ_URL" git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$SYSVIZ_TAG" "$SYSVIZ_URL" "$src"
-    (cd "$src" && swift build -c release) || die "swift build of sysviz failed"
+    run_long "swift build of sysviz" swift build -c release --package-path "$src" || exit 1
     sysviz_bin="$(cd "$src" && swift build -c release --show-bin-path)/sysviz" || die "swift build --show-bin-path failed"
     install_binary "$sysviz_bin" sysviz
 else
@@ -220,7 +273,7 @@ step "Building rice-settings.app"
 need swift "it comes with the Xcode Command Line Tools."
 src="$WORK/rice-settings"
 run "copying rice-settings sources" cp -R "$REPO_DIR/rice-settings" "$src"
-(cd "$src" && swift build -c release) || die "swift build of rice-settings failed"
+run_long "swift build of rice-settings" swift build -c release --package-path "$src" || exit 1
 rs_bin="$(cd "$src" && swift build -c release --show-bin-path)/rice-settings" || die "swift build --show-bin-path failed"
 APP="$APP_DIR/rice-settings.app"
 NEW_APP="$WORK/rice-settings.app"
@@ -295,6 +348,7 @@ fi
 
 # ---------------------------------------------------------------------------
 step "Done. Still to do by hand"
+info "total time: $(fmt_secs $(( $(date +%s) - START_TIME )))"
 cat <<EOF
     1. Grant Accessibility to cberry: System Settings > Privacy & Security >
        Accessibility, add $BIN_DIR/cberry (press + and Cmd+Shift+G to type the path),
