@@ -25,7 +25,7 @@ macOS only. sysviz needs macOS 14.2 or newer.
 | Cmd + Enter | open a new kitty window |
 | Opt + E | open Finder |
 | Opt + U | open Rice Settings |
-| Opt + W | wallpaper picker: runs `~/bin/wallpicker`, which this repo does not include, so the key does nothing until you add it |
+| Opt + W | wallpaper picker: a file dialog that opens `~/Pictures/Wallpapers`; the chosen image becomes the desktop picture on every desktop |
 
 ## Install
 
@@ -49,6 +49,7 @@ The script is safe to run again. It may ask for your password (Homebrew installe
 | `sysviz`, built from sysviz `v0.2.0` | `~/bin/sysviz` |
 | Rice Settings app (sources in `rice-settings/`) | `~/Applications/rice-settings.app`, sources in `~/bin/rice-settings` |
 | `configs/kitty`, `fish`, `cranberry`, `fastfetch`, `sysviz`, `rice-settings` | `~/.config/<name>/` |
+| `configs/bin/wallpicker` (wallpaper picker for opt+w) | `~/bin/wallpicker` |
 | cberry login service (`cberry install`, `cberry start`) | `~/Library/LaunchAgents` |
 | `eval "$(brew shellenv)"`, only if missing, so kitty finds fish | `~/.zprofile` |
 
@@ -63,7 +64,7 @@ Existing files that differ are saved first as `<file>.bak-<timestamp>`. Nothing 
 
 On first use macOS also asks to let your terminal capture system audio (sysviz) and control Music (musicplayer). The lyrics view sends the track title and artist to [lrclib.net](https://lrclib.net).
 
-The `alt - w` bind in `cberryrc` opens `~/bin/wallpicker`, which is not part of this repo; without it the key does nothing.
+Wallpapers: put images in `~/Pictures/Wallpapers` (created on first use). `configs/bin/wallpicker` is installed as `~/bin/wallpicker`. The first time, macOS asks to let your terminal control System Events.
 
 ## Rice Settings
 
