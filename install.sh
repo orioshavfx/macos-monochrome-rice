@@ -366,6 +366,8 @@ fi
 
 # ---------------------------------------------------------------------------
 step "Done. Still to do by hand"
+# Open Rice Settings now that cberry runs, so its floating rule places the window.
+open "$APP" 2>/dev/null && info "opened $APP" || warn "could not open $APP; open it from ~/Applications"
 info "total time: $(fmt_secs $(( $(date +%s) - START_TIME )))"
 cat <<EOF
     1. Grant Accessibility to cberry: System Settings > Privacy & Security >
