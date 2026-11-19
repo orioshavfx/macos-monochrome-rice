@@ -18,11 +18,20 @@ A monochrome macOS terminal setup: black, white and greys only.
 
 macOS only. sysviz needs macOS 14.2 or newer.
 
+## Shortcuts
+
+| Keys | Action |
+| --- | --- |
+| Cmd + Enter | open a new kitty window |
+| Opt + E | open Finder |
+| Opt + U | open Rice Settings |
+| Opt + W | wallpaper picker: runs `~/bin/wallpicker`, which this repo does not include, so the key does nothing until you add it |
+
 ## Install
 
 ```sh
 git clone https://github.com/orioshavfx/macos-monochrome-rice.git
-cd monochrome-macos-rice && ./install.sh
+cd macos-monochrome-rice && ./install.sh
 ```
 
 The script is safe to run again. It may ask for your password (Homebrew installer, some casks).
