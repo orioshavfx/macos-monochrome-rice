@@ -18,6 +18,8 @@ START_TIME="$(date +%s)"
 CRANBERRY_URL="https://github.com/emreekici3/cranberry.git"
 CRANBERRY_REV="42b5ed9"
 AMT_URL="https://github.com/sebasreateguib/AppleMusicTUI.git"
+# git options for clones: fail after a minute of stalled transfer instead of hanging.
+GIT_NET=(-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60)
 AMT_REV="eb796cc"
 SYSVIZ_URL="https://github.com/orioshavfx/sysviz.git"
 SYSVIZ_TAG="v0.2.0"
@@ -238,7 +240,7 @@ step "Building cberry (cranberry window manager, patched for non-Latin layouts)"
 need git "it comes with the Xcode Command Line Tools."
 need cargo "it should have been installed by brew bundle (rust)."
 src="$WORK/cranberry"
-run "cloning $CRANBERRY_URL" git clone --quiet "$CRANBERRY_URL" "$src"
+run_long "cloning cranberry" env GIT_TERMINAL_PROMPT=0 git "${GIT_NET[@]}" clone --quiet "$CRANBERRY_URL" "$src" || exit 1
 run "checking out cranberry $CRANBERRY_REV" git -C "$src" -c advice.detachedHead=false checkout --quiet "$CRANBERRY_REV"
 run "applying patches/cranberry-latin-layout.patch" git -C "$src" apply "$REPO_DIR/patches/cranberry-latin-layout.patch"
 run_long "cargo build of cberry" cargo build --release --manifest-path "$src/Cargo.toml" || exit 1
@@ -249,7 +251,7 @@ run "codesign cberry" codesign --force --sign - "$BIN_DIR/cberry"
 step "Building AppleMusicTUI (musicplayer, monochrome + lyrics patch)"
 need go "it should have been installed by brew bundle."
 src="$WORK/AppleMusicTUI"
-run "cloning $AMT_URL" git clone --quiet "$AMT_URL" "$src"
+run_long "cloning AppleMusicTUI" env GIT_TERMINAL_PROMPT=0 git "${GIT_NET[@]}" clone --quiet "$AMT_URL" "$src" || exit 1
 run "checking out AppleMusicTUI $AMT_REV" git -C "$src" -c advice.detachedHead=false checkout --quiet "$AMT_REV"
 run "applying patches/applemusictui.patch" git -C "$src" apply "$REPO_DIR/patches/applemusictui.patch"
 run_long "go build of AppleMusicTUI" go -C "$src" build -o "$WORK/musicplayer" . || exit 1
@@ -260,7 +262,7 @@ step "Building sysviz $SYSVIZ_TAG"
 if [ "$SYSVIZ_SUPPORTED" -eq 1 ]; then
     need swift "it comes with the Xcode Command Line Tools."
     src="$WORK/sysviz"
-    run "cloning $SYSVIZ_URL" git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$SYSVIZ_TAG" "$SYSVIZ_URL" "$src"
+    run_long "cloning sysviz" env GIT_TERMINAL_PROMPT=0 git "${GIT_NET[@]}" -c advice.detachedHead=false clone --quiet --depth 1 --branch "$SYSVIZ_TAG" "$SYSVIZ_URL" "$src" || exit 1
     run_long "swift build of sysviz" swift build -c release --package-path "$src" || exit 1
     sysviz_bin="$(cd "$src" && swift build -c release --show-bin-path)/sysviz" || die "swift build --show-bin-path failed"
     install_binary "$sysviz_bin" sysviz
