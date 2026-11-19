@@ -69,7 +69,7 @@ final class SysvizPage: NSView {
         let subtitle = "~/.config/sysviz/config.toml"
         let tabs = [
             PageTab(name: "Bars", subtitle: subtitle, sections: [
-                PageKit.section("Bars", "Every change is saved to the file at once.", [barsCard]),
+                PageKit.section("Bars", "Every change is saved to the file at once. sysviz reads the file when it starts, so restart it to apply.", [barsCard]),
             ]),
             PageTab(name: "Colors", subtitle: subtitle, sections: [
                 PageKit.section("Colors", "Solid uses one color; a gradient goes from the bottom color to the top color.",
@@ -117,7 +117,7 @@ final class SysvizPage: NSView {
         refresh()
         do {
             try config.save()
-            status.stringValue = "Saved to ~/.config/sysviz/config.toml"
+            status.stringValue = "Saved to ~/.config/sysviz/config.toml. Restart sysviz to apply."
         } catch {
             status.stringValue = "Could not save: \(error.localizedDescription)"
         }
