@@ -1,19 +1,38 @@
 //! Application state and key handling. Independent of the terminal, so the
 //! behaviour can be tested without drawing anything.
 
+use std::time::{Duration, Instant};
+
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{style::Color, widgets::ListState};
 
 use crate::config::{Config, KeyMap, KeySpec};
-use crate::music::{self, NowPlaying, Repeat, TrackRow};
+use crate::music::{self, NowPlaying, PlayerState, Repeat, TrackRow};
 
 const VOLUME_STEP: u8 = 5;
 const SEEK_STEP: f64 = 5.0;
+/// The queue takes over this many seconds before the current track ends.
+const ADVANCE_WINDOW: f64 = 1.5;
+/// Minimum time between two queue advances, so one track is never skipped twice.
+const ADVANCE_COOLDOWN: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
     Playlists,
     Tracks,
+}
+
+/// A track waiting in musictui's own queue. Music.app's "Up Next" is not
+/// reachable through AppleScript, so the queue lives here.
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueueItem {
+    /// Playlist the track was picked from.
+    pub playlist: String,
+    /// 1-based position of the track in that playlist.
+    pub index: usize,
+    pub title: String,
+    pub artist: String,
+    pub duration: f64,
 }
 
 pub struct App {
@@ -35,6 +54,9 @@ pub struct App {
     pub tracks_of: Option<String>,
     pub tracks: Vec<TrackRow>,
     pub track_state: ListState,
+
+    pub queue: Vec<QueueItem>,
+    last_advance: Option<Instant>,
 
     /// Last error or hint, shown in the footer.
     pub status: Option<String>,
@@ -82,6 +104,8 @@ impl App {
             tracks_of: None,
             tracks: Vec::new(),
             track_state: ListState::default(),
+            queue: Vec::new(),
+            last_advance: None,
             status: None,
             quit: false,
         }
@@ -109,10 +133,16 @@ impl App {
         }
     }
 
-    pub fn refresh_now(&mut self) {
-        if let Some(now) = self.report(music::now_playing()) {
-            self.now = now;
-        }
+    /// Read the player state. Returns `false` if Music.app could not be read,
+    /// so callers do not act on stale or missing data.
+    pub fn refresh_now(&mut self) -> bool {
+        let fetched = match self.report(music::now_playing()) {
+            Some(now) => {
+                self.now = now;
+                true
+            }
+            None => false,
+        };
         // Reload lyrics when the track changes.
         if self.lyrics_on {
             let title = self.now.as_ref().map(|n| n.title.clone());
@@ -120,6 +150,7 @@ impl App {
                 self.refresh_lyrics();
             }
         }
+        fetched
     }
 
     pub fn refresh_playlists(&mut self) {
@@ -168,9 +199,39 @@ impl App {
         }
     }
 
-    /// Periodic refresh of the player state.
+    /// Periodic refresh. Also starts the next queued track when the current one is ending.
     pub fn tick(&mut self) {
-        self.refresh_now();
+        if !self.refresh_now() || self.queue.is_empty() {
+            return;
+        }
+        let ending = match &self.now {
+            None => true,
+            Some(n) => match n.state {
+                PlayerState::Playing => {
+                    n.duration > 0.0 && n.duration - n.position <= ADVANCE_WINDOW
+                }
+                PlayerState::Stopped => true,
+                _ => false,
+            },
+        };
+        if ending && self.cooldown_passed() {
+            self.play_queue_front();
+        }
+    }
+
+    fn cooldown_passed(&self) -> bool {
+        self.last_advance
+            .is_none_or(|t| t.elapsed() >= ADVANCE_COOLDOWN)
+    }
+
+    /// Remove the first queued track and play it.
+    fn play_queue_front(&mut self) {
+        if self.queue.is_empty() {
+            return;
+        }
+        let item = self.queue.remove(0);
+        self.last_advance = Some(Instant::now());
+        self.act(music::play_track(&item.playlist, item.index));
     }
 
     /// Run a command against Music.app and refresh the state afterwards.
@@ -178,6 +239,36 @@ impl App {
         if self.report(result).is_some() {
             self.refresh_now();
         }
+    }
+
+    /// Put the selected track at the end of the queue.
+    fn enqueue_selected(&mut self) {
+        if self.focus != Focus::Tracks {
+            self.status = Some("Press Tab to pick a track, then a to queue it.".into());
+            return;
+        }
+        let (Some(i), Some(name)) = (self.track_state.selected(), self.tracks_of.clone()) else {
+            return;
+        };
+        let row = &self.tracks[i];
+        self.queue.push(QueueItem {
+            playlist: name,
+            index: i + 1,
+            title: row.title.clone(),
+            artist: row.artist.clone(),
+            duration: row.duration,
+        });
+        self.status = Some(format!(
+            "Queued: {} (queue: {})",
+            row.title,
+            self.queue.len()
+        ));
+    }
+
+    fn clear_queue(&mut self) {
+        let n = self.queue.len();
+        self.queue.clear();
+        self.status = Some(format!("Queue cleared ({n} removed)"));
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -196,7 +287,12 @@ impl App {
         } else if m(k.play_pause) {
             self.act(music::play_pause());
         } else if m(k.next) {
-            self.act(music::next_track());
+            // With a queue, "next" plays the queue; otherwise Music.app decides.
+            if self.queue.is_empty() {
+                self.act(music::next_track());
+            } else {
+                self.play_queue_front();
+            }
         } else if m(k.previous) {
             self.act(music::previous_track());
         } else if m(k.shuffle) {
@@ -225,6 +321,10 @@ impl App {
             }
         } else if self.fullscreen {
             // In fullscreen only the transport keys above apply.
+        } else if m(k.queue_add) {
+            self.enqueue_selected();
+        } else if m(k.queue_clear) {
+            self.clear_queue();
         } else if m(k.focus_next) {
             self.focus = match self.focus {
                 Focus::Playlists => Focus::Tracks,
@@ -288,12 +388,38 @@ mod tests {
         a
     }
 
+    /// An app with one playlist "A" showing three tracks, focus on the track list.
+    fn app_with_tracks() -> App {
+        let mut a = app();
+        a.tracks_of = Some("A".into());
+        a.tracks = (1..=3)
+            .map(|n| TrackRow {
+                title: format!("Track {n}"),
+                artist: "Artist".into(),
+                duration: 100.0,
+            })
+            .collect();
+        a.track_state.select(Some(1));
+        a.focus = Focus::Tracks;
+        a
+    }
+
     fn press(c: KeyCode) -> KeyEvent {
         KeyEvent {
             code: c,
             modifiers: KeyModifiers::NONE,
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
+        }
+    }
+
+    fn queued(title: &str) -> QueueItem {
+        QueueItem {
+            playlist: "A".into(),
+            index: 1,
+            title: title.into(),
+            artist: "x".into(),
+            duration: 10.0,
         }
     }
 
@@ -339,5 +465,49 @@ mod tests {
         let mut s = ListState::default();
         step(&mut s, 0, 1);
         assert_eq!(s.selected(), None);
+    }
+
+    #[test]
+    fn a_queues_selected_track_with_its_position() {
+        let mut a = app_with_tracks();
+        a.handle_key(press(KeyCode::Char('a')));
+        assert_eq!(a.queue.len(), 1);
+        assert_eq!(a.queue[0].playlist, "A");
+        assert_eq!(a.queue[0].index, 2);
+        assert_eq!(a.queue[0].title, "Track 2");
+    }
+
+    #[test]
+    fn a_needs_track_focus() {
+        let mut a = app_with_tracks();
+        a.focus = Focus::Playlists;
+        a.handle_key(press(KeyCode::Char('a')));
+        assert!(a.queue.is_empty());
+        assert!(a.status.is_some());
+    }
+
+    #[test]
+    fn c_clears_queue() {
+        let mut a = app_with_tracks();
+        a.queue = vec![queued("1"), queued("2")];
+        a.handle_key(press(KeyCode::Char('c')));
+        assert!(a.queue.is_empty());
+    }
+
+    #[test]
+    fn failed_refresh_does_not_touch_the_queue() {
+        // On Linux there is no osascript, so refresh fails. The queue must stay intact.
+        let mut a = app_with_tracks();
+        a.queue = vec![queued("1"), queued("2")];
+        a.tick();
+        assert_eq!(a.queue.len(), 2);
+    }
+
+    #[test]
+    fn cooldown_blocks_repeat_advances() {
+        let mut a = app();
+        assert!(a.cooldown_passed());
+        a.last_advance = Some(Instant::now());
+        assert!(!a.cooldown_passed());
     }
 }

@@ -26,14 +26,46 @@ fn draw_normal(frame: &mut Frame, app: &App, area: Rect) {
     let [now_area, lower] =
         Layout::vertical([Constraint::Length(9), Constraint::Min(0)]).areas(right);
 
+    // The queue panel appears under the track list only while something is queued.
+    let (main_lower, queue_area) = if app.queue.is_empty() {
+        (lower, None)
+    } else {
+        let height = app.queue.len().min(6) as u16 + 2;
+        let [m, q] =
+            Layout::vertical([Constraint::Min(0), Constraint::Length(height)]).areas(lower);
+        (m, Some(q))
+    };
+
     draw_playlists(frame, app, left);
     draw_now_playing(frame, app, now_area);
     if app.lyrics_on {
-        draw_lyrics(frame, app, lower);
+        draw_lyrics(frame, app, main_lower);
     } else {
-        draw_tracks(frame, app, lower);
+        draw_tracks(frame, app, main_lower);
+    }
+    if let Some(q) = queue_area {
+        draw_queue(frame, app, q);
     }
     draw_footer(frame, app, footer);
+}
+
+fn draw_queue(frame: &mut Frame, app: &App, area: Rect) {
+    let title = format!("Queue ({})", app.queue.len());
+    let items: Vec<ListItem> = app
+        .queue
+        .iter()
+        .enumerate()
+        .map(|(i, q)| {
+            ListItem::new(format!(
+                "{:>2}. {:<40} {:<24} {}",
+                i + 1,
+                truncate(&q.title, 40),
+                truncate(&q.artist, 24),
+                fmt_time(q.duration)
+            ))
+        })
+        .collect();
+    frame.render_widget(List::new(items).block(block(&title, app)), area);
 }
 
 fn draw_fullscreen(frame: &mut Frame, app: &App, area: Rect) {
@@ -232,11 +264,13 @@ pub fn help_line(keys: &KeyMap, fullscreen: bool) -> String {
         format!("{transport} · {} quit", k(keys.quit))
     } else {
         format!(
-            "{transport} · {} switch · {}/{} move · {} play · {} quit",
+            "{transport} · {} switch · {}/{} move · {} play · {} queue · {} clear queue · {} quit",
             k(keys.focus_next),
             k(keys.up),
             k(keys.down),
             k(keys.select),
+            k(keys.queue_add),
+            k(keys.queue_clear),
             k(keys.quit),
         )
     }
@@ -331,5 +365,59 @@ mod tests {
         let line = help_line(&keys, true);
         assert!(line.contains("space play/pause"));
         assert!(line.contains("exit fullscreen"));
+    }
+}
+
+#[cfg(test)]
+mod render_tests {
+    use super::*;
+    use crate::app::{App, QueueItem};
+    use crate::config::{Config, Keys};
+    use ratatui::{backend::TestBackend, Terminal};
+
+    fn item(n: usize) -> QueueItem {
+        QueueItem {
+            playlist: "P".into(),
+            index: n,
+            title: format!("Song {n}"),
+            artist: "Band".into(),
+            duration: 200.0,
+        }
+    }
+
+    fn render(app: &App, w: u16, h: u16) -> String {
+        let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();
+        term.draw(|f| draw(f, app)).unwrap();
+        let buf = term.backend().buffer().clone();
+        buf.content().iter().map(|c| c.symbol()).collect()
+    }
+
+    fn app_with(queue: Vec<QueueItem>) -> App {
+        let cfg = Config::default();
+        let keys = KeyMap::from_config(&Keys::default()).unwrap();
+        let mut app = App::new(&cfg, keys, ratatui::style::Color::White);
+        app.queue = queue;
+        app
+    }
+
+    #[test]
+    fn draws_without_queue() {
+        let text = render(&app_with(vec![]), 100, 30);
+        assert!(text.contains("Playlists"));
+        assert!(!text.contains("Queue ("));
+    }
+
+    #[test]
+    fn draws_queue_panel_with_items() {
+        let text = render(&app_with(vec![item(1), item(2)]), 100, 30);
+        assert!(text.contains("Queue (2)"));
+        assert!(text.contains("Song 2"));
+    }
+
+    #[test]
+    fn long_queue_is_capped_and_small_terminal_does_not_panic() {
+        let many: Vec<QueueItem> = (1..=20).map(item).collect();
+        let _ = render(&app_with(many.clone()), 100, 30);
+        let _ = render(&app_with(many), 40, 10);
     }
 }
