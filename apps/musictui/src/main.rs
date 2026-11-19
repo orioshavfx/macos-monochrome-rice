@@ -3,6 +3,7 @@
 
 mod app;
 mod config;
+mod cover;
 mod music;
 mod ui;
 

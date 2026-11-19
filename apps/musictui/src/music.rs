@@ -10,6 +10,8 @@ use anyhow::{bail, Context, Result};
 
 const SEP: char = '\u{1f}';
 const RS: char = '\u{1e}';
+/// Where `fetch_cover` writes the raw artwork bytes (any format Music.app uses).
+pub const RAW_COVER_PATH: &str = "/tmp/musictui-cover.bin";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlayerState {
@@ -195,24 +197,20 @@ return out
     Ok(split_items(&reply).into_iter().map(String::from).collect())
 }
 
-/// Tracks of a playlist. Titles, artists and durations are read as three bulk
-/// lists instead of one Apple event per track per field, which is what made
-/// large playlists slow.
+/// Tracks of a playlist. Titles, artists and durations come as three bulk lists.
+/// Each value is read with its own `tell` expression: assigning variables inside
+/// a `tell` block makes AppleScript treat them as properties of Music.
 pub fn playlist_tracks(playlist: &str) -> Result<Vec<TrackRow>> {
     let script = format!(
         r#"
 set sep to (ASCII character 31)
 set rs to (ASCII character 30)
 set AppleScript's text item delimiters to sep
-tell application "Music"
-    set pl to user playlist "{}"
-    set titles to name of tracks of pl
-    set artists to artist of tracks of pl
-    set durations to duration of tracks of pl
-end tell
-set out to (titles as text) & rs & (artists as text) & rs & (durations as text)
+set titles to (tell application "Music" to name of tracks of user playlist "{0}") as text
+set artists to (tell application "Music" to artist of tracks of user playlist "{0}") as text
+set durations to (tell application "Music" to duration of tracks of user playlist "{0}") as text
 set AppleScript's text item delimiters to ""
-return out
+return titles & rs & artists & rs & durations
 "#,
         escape(playlist)
     );
@@ -220,10 +218,23 @@ return out
     Ok(parse_track_blocks(&reply))
 }
 
-/// Lyrics of the current track. Music.app returns them only for tracks that are
-/// stored locally; streamed tracks give an empty string.
-pub fn current_lyrics() -> Result<String> {
-    run(r#"tell application "Music" to lyrics of current track"#)
+/// Write the current track's artwork to `RAW_COVER_PATH`. Returns `false` when
+/// the track has no artwork.
+pub fn fetch_cover() -> Result<bool> {
+    let script = format!(
+        r#"
+set artCount to (tell application "Music" to count of artworks of current track)
+if artCount is 0 then return "none"
+set artData to (tell application "Music" to raw data of artwork 1 of current track)
+set fh to open for access (POSIX file "{}") with write permission
+set eof of fh to 0
+write artData to fh
+close access fh
+return "ok"
+"#,
+        RAW_COVER_PATH
+    );
+    Ok(run(&script)? == "ok")
 }
 
 pub fn play_playlist(playlist: &str) -> Result<()> {

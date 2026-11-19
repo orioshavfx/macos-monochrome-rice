@@ -8,7 +8,7 @@ A monochrome macOS terminal setup: black, white and greys only.
 - **sysviz**: audio visualizer for the terminal
 - **fastfetch**: grey system info
 - **rice-settings**: a small native app to change all of the above (Opt+U or `setup`)
-- **musictui** (`apps/musictui`, Rust): terminal player for Music.app. Playlists, transport, shuffle, repeat, fullscreen and lyrics; everything is set in `~/.config/musictui/config.toml`
+- **musictui** (`apps/musictui`, Rust): terminal player for Music.app. Playlists, transport, shuffle, repeat, its own queue, fullscreen and pixel cover art; everything is set in `~/.config/musictui/config.toml`
 
 macOS only. sysviz needs macOS 14.2 or newer.
 
@@ -46,7 +46,7 @@ Existing files that differ are saved first as `<file>.bak-<timestamp>`. Nothing 
 3. **Font.** kitty uses Hasklug Nerd Font (installed by the Brewfile). To use another one, change `font_family` in `~/.config/kitty/kitty.conf` or pick it in Rice Settings.
 4. Open kitty, then press Opt+U or type `setup`.
 
-On first use macOS also asks to let your terminal capture system audio (sysviz) and control Music (musictui). The `speedtest` alias asks you to accept Ookla's license once. Lyrics come only from Music.app, so they appear for tracks stored on this Mac; musictui sends nothing to other services.
+On first use macOS also asks to let your terminal capture system audio (sysviz) and control Music (musictui). The `speedtest` alias asks you to accept Ookla's license once. musictui reads the artwork from Music.app and sends nothing to other services.
 
 The `alt - w` bind in `cberryrc` opens `~/bin/wallpicker`, which is not part of this repo; without it the key does nothing.
 
@@ -56,7 +56,7 @@ The `alt - w` bind in `cberryrc` opens `~/bin/wallpicker`, which is not part of 
 musictui    # in a terminal; press q to quit
 ```
 
-Settings are in `~/.config/musictui/config.toml`: accent colour, whether lyrics and fullscreen start on, refresh rate and every key. A misspelled key is reported at start-up. Music.app must be running and signed in to Apple Music for playback to work. musictui does not search the catalogue: it works with playlists and tracks already in your library.
+Settings are in `~/.config/musictui/config.toml`: accent colour, whether fullscreen starts on, refresh rate and every key. A misspelled key or an old option such as `show_lyrics` is reported at start-up; delete that line to fix it. The cover is drawn in the artwork's own colours, as half-block pixels. Music.app must be running and signed in to Apple Music for playback to work. musictui does not search the catalogue: it works with playlists and tracks already in your library.
 
 ## Rice Settings
 

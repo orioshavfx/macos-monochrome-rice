@@ -3,11 +3,12 @@
 
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Gauge, List, ListItem, Paragraph},
 };
 
 use crate::app::{App, Focus};
 use crate::config::KeyMap;
+use crate::cover::PixelCover;
 use crate::music::{NowPlaying, PlayerState, Repeat};
 
 pub fn draw(frame: &mut Frame, app: &App) {
@@ -23,8 +24,9 @@ fn draw_normal(frame: &mut Frame, app: &App, area: Rect) {
     let [main, footer] = Layout::vertical([Constraint::Min(0), Constraint::Length(2)]).areas(area);
     let [left, right] =
         Layout::horizontal([Constraint::Length(28), Constraint::Min(0)]).areas(main);
+    // Tall enough for the pixel cover next to the text.
     let [now_area, lower] =
-        Layout::vertical([Constraint::Length(9), Constraint::Min(0)]).areas(right);
+        Layout::vertical([Constraint::Length(12), Constraint::Min(0)]).areas(right);
 
     // The queue panel appears under the track list only while something is queued.
     let (main_lower, queue_area) = if app.queue.is_empty() {
@@ -38,11 +40,7 @@ fn draw_normal(frame: &mut Frame, app: &App, area: Rect) {
 
     draw_playlists(frame, app, left);
     draw_now_playing(frame, app, now_area);
-    if app.lyrics_on {
-        draw_lyrics(frame, app, main_lower);
-    } else {
-        draw_tracks(frame, app, main_lower);
-    }
+    draw_tracks(frame, app, main_lower);
     if let Some(q) = queue_area {
         draw_queue(frame, app, q);
     }
@@ -75,18 +73,30 @@ fn draw_fullscreen(frame: &mut Frame, app: &App, area: Rect) {
         Constraint::Percentage(15),
     ])
     .areas(area);
-    let [_, info, lyrics, footer] = Layout::vertical([
-        Constraint::Percentage(20),
-        Constraint::Length(10),
-        Constraint::Min(0),
-        Constraint::Length(2),
-    ])
-    .areas(centre);
+    // With artwork the cover fills the space above the track info.
+    let (cover_area, info, footer) = if app.cover.is_some() {
+        let [c, i, f] = Layout::vertical([
+            Constraint::Min(0),
+            Constraint::Length(10),
+            Constraint::Length(2),
+        ])
+        .areas(centre);
+        (Some(c), i, f)
+    } else {
+        let [_, i, _, f] = Layout::vertical([
+            Constraint::Percentage(20),
+            Constraint::Length(10),
+            Constraint::Min(0),
+            Constraint::Length(2),
+        ])
+        .areas(centre);
+        (None, i, f)
+    };
 
-    draw_now_playing(frame, app, info);
-    if app.lyrics_on {
-        draw_lyrics(frame, app, lyrics);
+    if let (Some(area), Some(img)) = (cover_area, app.cover.as_ref()) {
+        frame.render_widget(PixelCover { img }, area);
     }
+    draw_now_playing(frame, app, info);
     draw_footer(frame, app, footer);
 }
 
@@ -133,41 +143,53 @@ fn draw_tracks(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-fn draw_lyrics(frame: &mut Frame, app: &App, area: Rect) {
-    let text = app
-        .lyrics
-        .clone()
-        .unwrap_or_else(|| "Lyrics are not loaded.".into());
-    let p = Paragraph::new(text)
-        .block(block("Lyrics", app))
-        .wrap(Wrap { trim: false })
-        .alignment(Alignment::Center);
-    frame.render_widget(p, area);
+/// Splits `area` into a cover column and the text area. Without artwork the
+/// text gets the whole area.
+fn with_cover(app: &App, area: Rect) -> (Option<Rect>, Rect) {
+    if app.cover.is_none() {
+        return (None, area);
+    }
+    let cover_w = (area.height * 2).min(area.width / 2);
+    let [cover, _, text] = Layout::horizontal([
+        Constraint::Length(cover_w),
+        Constraint::Length(2),
+        Constraint::Min(0),
+    ])
+    .areas(area);
+    (Some(cover), text)
 }
 
 fn draw_now_playing(frame: &mut Frame, app: &App, area: Rect) {
-    let inner_block = block("Now playing", app);
-    let inner = inner_block.inner(area);
-    frame.render_widget(inner_block, area);
+    let now_block = block("Now playing", app);
+    let inner = now_block.inner(area);
+    frame.render_widget(now_block, area);
+
+    let (cover_area, text_area) = with_cover(app, inner);
+    if let (Some(cover_area), Some(img)) = (cover_area, app.cover.as_ref()) {
+        frame.render_widget(PixelCover { img }, cover_area);
+    }
 
     let Some(now) = app.now.as_ref() else {
         frame.render_widget(
             Paragraph::new("Nothing is playing. Pick a playlist and press Enter.")
                 .alignment(Alignment::Center),
-            inner,
+            text_area,
         );
         return;
     };
 
-    let [title, artist, _, gauge, times, controls] = Layout::vertical([
+    // Six text rows, centred vertically in the available height.
+    let [_, title, artist, _, gauge, times, controls, _] = Layout::vertical([
+        Constraint::Min(0),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
+        Constraint::Min(0),
     ])
-    .areas(inner);
+    .areas(text_area);
 
     let state_glyph = match now.state {
         PlayerState::Playing => "▶",
@@ -246,7 +268,7 @@ fn highlight(app: &App, focused: bool) -> Style {
 pub fn help_line(keys: &KeyMap, fullscreen: bool) -> String {
     let k = |s: crate::config::KeySpec| key_label(s);
     let transport = format!(
-        "{} play/pause · {} next · {} prev · {} shuffle · {} repeat · {}/{} volume · {}/{} seek · {} lyrics · {} {}",
+        "{} play/pause · {} next · {} prev · {} shuffle · {} repeat · {}/{} volume · {}/{} seek · {} {}",
         k(keys.play_pause),
         k(keys.next),
         k(keys.previous),
@@ -256,7 +278,6 @@ pub fn help_line(keys: &KeyMap, fullscreen: bool) -> String {
         k(keys.volume_down),
         k(keys.seek_back),
         k(keys.seek_forward),
-        k(keys.lyrics),
         if fullscreen { "exit fullscreen" } else { "fullscreen" },
         k(keys.fullscreen),
     );
@@ -419,5 +440,28 @@ mod render_tests {
         let many: Vec<QueueItem> = (1..=20).map(item).collect();
         let _ = render(&app_with(many.clone()), 100, 30);
         let _ = render(&app_with(many), 40, 10);
+    }
+
+    fn with_cover_art(mut app: App) -> App {
+        app.cover = Some(image::RgbImage::from_pixel(
+            4,
+            4,
+            image::Rgb([200, 120, 40]),
+        ));
+        app
+    }
+
+    #[test]
+    fn draws_pixel_cover_when_artwork_is_loaded() {
+        let text = render(&with_cover_art(app_with(vec![])), 100, 30);
+        assert!(text.contains('▀'));
+    }
+
+    #[test]
+    fn fullscreen_with_cover_and_small_terminal_does_not_panic() {
+        let mut app = with_cover_art(app_with(vec![]));
+        app.fullscreen = true;
+        let _ = render(&app, 100, 30);
+        let _ = render(&app, 20, 8);
     }
 }

@@ -4,8 +4,6 @@
 [view]
 # Accent colour for borders, the selection and the progress bar (#rrggbb).
 accent = "#ffffff"
-# Show the lyrics panel when musictui starts (toggle it with `l`).
-show_lyrics = false
 # Start in fullscreen mode: now playing only, no playlists.
 start_fullscreen = false
 # How often the player state is refreshed, in milliseconds (minimum 100).
@@ -23,7 +21,6 @@ volume_down = "-"
 seek_forward = "right"
 seek_back = "left"
 fullscreen = "f"
-lyrics = "l"
 queue_add = "a"
 queue_clear = "c"
 focus_next = "tab"

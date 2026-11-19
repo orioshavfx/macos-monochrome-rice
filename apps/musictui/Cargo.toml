@@ -8,6 +8,8 @@ license = "MIT"
 [dependencies]
 ratatui = "0.29"
 crossterm = "0.28"
+# Only PNG decoding: sips converts the artwork to PNG first.
+image = { version = "0.25", default-features = false, features = ["png"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 anyhow = "1"

@@ -19,8 +19,6 @@ pub struct Config {
 pub struct View {
     /// Accent colour as `#rrggbb`. Monochrome by default.
     pub accent: String,
-    /// Show the lyrics panel when the app starts.
-    pub show_lyrics: bool,
     /// How often the player state is refreshed, in milliseconds.
     pub poll_ms: u64,
     /// Start in fullscreen (now playing only) mode.
@@ -40,7 +38,6 @@ pub struct Keys {
     pub seek_forward: String,
     pub seek_back: String,
     pub fullscreen: String,
-    pub lyrics: String,
     pub queue_add: String,
     pub queue_clear: String,
     pub focus_next: String,
@@ -54,7 +51,6 @@ impl Default for View {
     fn default() -> Self {
         Self {
             accent: "#ffffff".into(),
-            show_lyrics: false,
             poll_ms: 1000,
             start_fullscreen: false,
         }
@@ -74,7 +70,6 @@ impl Default for Keys {
             seek_forward: "right".into(),
             seek_back: "left".into(),
             fullscreen: "f".into(),
-            lyrics: "l".into(),
             queue_add: "a".into(),
             queue_clear: "c".into(),
             focus_next: "tab".into(),
@@ -178,7 +173,6 @@ pub struct KeyMap {
     pub seek_forward: KeySpec,
     pub seek_back: KeySpec,
     pub fullscreen: KeySpec,
-    pub lyrics: KeySpec,
     pub queue_add: KeySpec,
     pub queue_clear: KeySpec,
     pub focus_next: KeySpec,
@@ -204,7 +198,6 @@ impl KeyMap {
             seek_forward: p("seek_forward", &keys.seek_forward)?,
             seek_back: p("seek_back", &keys.seek_back)?,
             fullscreen: p("fullscreen", &keys.fullscreen)?,
-            lyrics: p("lyrics", &keys.lyrics)?,
             queue_add: p("queue_add", &keys.queue_add)?,
             queue_clear: p("queue_clear", &keys.queue_clear)?,
             focus_next: p("focus_next", &keys.focus_next)?,
@@ -231,10 +224,10 @@ mod tests {
     #[test]
     fn partial_file_overrides_only_given_keys() {
         let c: Config =
-            toml::from_str("[keys]\nquit = \"x\"\n[view]\nshow_lyrics = true\n").unwrap();
+            toml::from_str("[keys]\nquit = \"x\"\n[view]\nstart_fullscreen = true\n").unwrap();
         assert_eq!(c.keys.quit, "x");
         assert_eq!(c.keys.next, "n");
-        assert!(c.view.show_lyrics);
+        assert!(c.view.start_fullscreen);
     }
 
     #[test]

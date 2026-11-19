@@ -1,14 +1,19 @@
 //! Application state and key handling. Independent of the terminal, so the
 //! behaviour can be tested without drawing anything.
 
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent};
+use image::RgbImage;
 use ratatui::{style::Color, widgets::ListState};
 
 use crate::config::{Config, KeyMap, KeySpec};
+use crate::cover;
 use crate::music::{self, NowPlaying, PlayerState, Repeat, TrackRow};
 
+/// Work file for the artwork conversion (sips writes PNG here).
+const COVER_PNG: &str = "/tmp/musictui-cover.png";
 const VOLUME_STEP: u8 = 5;
 const SEEK_STEP: f64 = 5.0;
 /// The queue takes over this many seconds before the current track ends.
@@ -42,10 +47,10 @@ pub struct App {
     pub keys: KeyMap,
 
     pub now: Option<NowPlaying>,
-    pub lyrics: Option<String>,
-    pub lyrics_on: bool,
-    /// Title of the track the lyrics were loaded for, to reload them on change.
-    lyrics_title: Option<String>,
+    /// Artwork of the current track as greyscale pixels, drawn as a pixel cover.
+    pub cover: Option<RgbImage>,
+    /// Title of the track `cover` belongs to, to reload it when the track changes.
+    cover_title: Option<String>,
 
     pub fullscreen: bool,
     pub focus: Focus,
@@ -99,9 +104,8 @@ impl App {
             accent,
             keys,
             now: None,
-            lyrics: None,
-            lyrics_on: cfg.view.show_lyrics,
-            lyrics_title: None,
+            cover: None,
+            cover_title: None,
             fullscreen: cfg.view.start_fullscreen,
             focus: Focus::Playlists,
             playlists: Vec::new(),
@@ -122,9 +126,6 @@ impl App {
     pub fn start(&mut self) {
         self.refresh_playlists();
         self.refresh_now();
-        if self.lyrics_on {
-            self.refresh_lyrics();
-        }
     }
 
     fn report<T>(&mut self, result: anyhow::Result<T>) -> Option<T> {
@@ -147,11 +148,11 @@ impl App {
             }
             None => false,
         };
-        // Reload lyrics when the track changes.
-        if self.lyrics_on {
+        // Load the artwork again only when the track changes.
+        if fetched {
             let title = self.now.as_ref().map(|n| n.title.clone());
-            if title != self.lyrics_title {
-                self.refresh_lyrics();
+            if title != self.cover_title {
+                self.refresh_cover();
             }
         }
         fetched
@@ -170,15 +171,20 @@ impl App {
         self.load_selected_playlist_tracks();
     }
 
-    fn refresh_lyrics(&mut self) {
-        self.lyrics_title = self.now.as_ref().map(|n| n.title.clone());
-        self.lyrics = self.report(music::current_lyrics()).map(|s| {
-            if s.trim().is_empty() {
-                "No lyrics for this track (Music.app returns lyrics only for local tracks).".into()
-            } else {
-                s
-            }
-        });
+    /// Load the artwork of the current track. Tracks without artwork get no cover.
+    fn refresh_cover(&mut self) {
+        self.cover_title = self.now.as_ref().map(|n| n.title.clone());
+        self.cover = None;
+        if self.now.is_none() {
+            return;
+        }
+        let has_art = self.report(music::fetch_cover()).unwrap_or(false);
+        if has_art {
+            self.cover = self.report(cover::load(
+                Path::new(music::RAW_COVER_PATH),
+                Path::new(COVER_PNG),
+            ));
+        }
     }
 
     /// Show the tracks of the playlist under the cursor.
@@ -305,11 +311,6 @@ impl App {
             self.quit = true;
         } else if m(k.fullscreen) {
             self.fullscreen = !self.fullscreen;
-        } else if m(k.lyrics) {
-            self.lyrics_on = !self.lyrics_on;
-            if self.lyrics_on {
-                self.refresh_lyrics();
-            }
         } else if m(k.play_pause) {
             self.act(music::play_pause());
         } else if m(k.next) {
