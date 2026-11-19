@@ -24,9 +24,10 @@ fn draw_normal(frame: &mut Frame, app: &App, area: Rect) {
     let [main, footer] = Layout::vertical([Constraint::Min(0), Constraint::Length(2)]).areas(area);
     let [left, right] =
         Layout::horizontal([Constraint::Length(28), Constraint::Min(0)]).areas(main);
-    // Tall enough for the pixel cover next to the text.
-    let [now_area, lower] =
-        Layout::vertical([Constraint::Length(12), Constraint::Min(0)]).areas(right);
+    // Two blocks of the same size side by side at the top: now playing and the cover.
+    let [top, lower] = Layout::vertical([Constraint::Length(12), Constraint::Min(0)]).areas(right);
+    let [now_area, cover_area] =
+        Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).areas(top);
 
     // The queue panel appears under the track list only while something is queued.
     let (main_lower, queue_area) = if app.queue.is_empty() {
@@ -40,6 +41,7 @@ fn draw_normal(frame: &mut Frame, app: &App, area: Rect) {
 
     draw_playlists(frame, app, left);
     draw_now_playing(frame, app, now_area);
+    draw_cover(frame, app, cover_area);
     draw_tracks(frame, app, main_lower);
     if let Some(q) = queue_area {
         draw_queue(frame, app, q);
@@ -158,40 +160,28 @@ fn draw_tracks(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-/// Splits `area` into a cover column and the text area. Without artwork the
-/// text gets the whole area.
-fn with_cover(app: &App, area: Rect) -> (Option<Rect>, Rect) {
-    if app.cover.is_none() && app.cover_note.is_none() {
-        return (None, area);
+/// The cover in its own block, the same size as the now playing block.
+fn draw_cover(frame: &mut Frame, app: &App, area: Rect) {
+    let cover_block = block("Cover", app);
+    let inner = cover_block.inner(area);
+    frame.render_widget(cover_block, area);
+    match app.cover.as_ref() {
+        Some(img) => frame.render_widget(PixelCover { img }, inner),
+        None => {
+            let note = app.cover_note.as_deref().unwrap_or("No cover");
+            let p = Paragraph::new(note)
+                .style(Style::default().dim())
+                .alignment(Alignment::Center)
+                .wrap(Wrap { trim: true });
+            frame.render_widget(p, inner);
+        }
     }
-    let cover_w = (area.height * 2).min(area.width / 2);
-    let [cover, _, text] = Layout::horizontal([
-        Constraint::Length(cover_w),
-        Constraint::Length(2),
-        Constraint::Min(0),
-    ])
-    .areas(area);
-    (Some(cover), text)
 }
 
 fn draw_now_playing(frame: &mut Frame, app: &App, area: Rect) {
     let now_block = block("Now playing", app);
-    let inner = now_block.inner(area);
+    let text_area = now_block.inner(area);
     frame.render_widget(now_block, area);
-
-    let (cover_area, text_area) = with_cover(app, inner);
-    if let Some(cover_area) = cover_area {
-        match app.cover.as_ref() {
-            Some(img) => frame.render_widget(PixelCover { img }, cover_area),
-            None => {
-                let note = app.cover_note.as_deref().unwrap_or("");
-                let p = Paragraph::new(note)
-                    .style(Style::default().dim())
-                    .wrap(Wrap { trim: true });
-                frame.render_widget(p, cover_area);
-            }
-        }
-    }
 
     let Some(now) = app.now.as_ref() else {
         frame.render_widget(
@@ -220,15 +210,19 @@ fn draw_now_playing(frame: &mut Frame, app: &App, area: Rect) {
         PlayerState::Paused => "❚❚",
         _ => "■",
     };
+    let width = text_area.width as usize;
     frame.render_widget(
-        Paragraph::new(format!("{state_glyph}  {}", now.title))
+        Paragraph::new(truncate(&format!("{state_glyph}  {}", now.title), width))
             .style(Style::default().bold())
             .alignment(Alignment::Center),
         title,
     );
     frame.render_widget(
-        Paragraph::new(join_nonempty(&[&now.artist, &now.album], " · "))
-            .alignment(Alignment::Center),
+        Paragraph::new(truncate(
+            &join_nonempty(&[&now.artist, &now.album], " · "),
+            width,
+        ))
+        .alignment(Alignment::Center),
         artist,
     );
 
@@ -261,7 +255,7 @@ fn draw_now_playing(frame: &mut Frame, app: &App, area: Rect) {
 
 fn controls_line(now: &NowPlaying) -> String {
     format!(
-        "shuffle {}   repeat {}   volume {}",
+        "shuffle {} · repeat {} · vol {}",
         on_off(now.shuffle),
         repeat_label(&now.repeat),
         now.volume

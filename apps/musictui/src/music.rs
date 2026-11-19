@@ -198,19 +198,23 @@ return out
 }
 
 /// Tracks of a playlist. Titles, artists and durations come as three bulk lists.
-/// Each value is read with its own `tell` expression: assigning variables inside
-/// a `tell` block makes AppleScript treat them as properties of Music.
+/// Values are read with `... of application "Music"` references. A `tell` block
+/// cannot be used inside parentheses, and assigning variables inside a `tell`
+/// block makes AppleScript treat them as properties of Music.
 pub fn playlist_tracks(playlist: &str) -> Result<Vec<TrackRow>> {
     let script = format!(
         r#"
 set sep to (ASCII character 31)
 set rs to (ASCII character 30)
+set titles to name of tracks of user playlist "{0}" of application "Music"
+set artists to artist of tracks of user playlist "{0}" of application "Music"
+set durations to duration of tracks of user playlist "{0}" of application "Music"
 set AppleScript's text item delimiters to sep
-set titles to (tell application "Music" to name of tracks of user playlist "{0}") as text
-set artists to (tell application "Music" to artist of tracks of user playlist "{0}") as text
-set durations to (tell application "Music" to duration of tracks of user playlist "{0}") as text
+set titleText to titles as text
+set artistText to artists as text
+set durationText to durations as text
 set AppleScript's text item delimiters to ""
-return titles & rs & artists & rs & durations
+return titleText & rs & artistText & rs & durationText
 "#,
         escape(playlist)
     );
@@ -223,9 +227,9 @@ return titles & rs & artists & rs & durations
 pub fn fetch_cover() -> Result<bool> {
     let script = format!(
         r#"
-set artCount to (tell application "Music" to count of artworks of current track)
+set artCount to count of artworks of current track of application "Music"
 if artCount is 0 then return "none"
-set artData to (tell application "Music" to raw data of artwork 1 of current track)
+set artData to raw data of artwork 1 of current track of application "Music"
 set fh to open for access (POSIX file "{}") with write permission
 set eof of fh to 0
 write artData to fh
