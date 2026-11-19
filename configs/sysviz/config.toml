@@ -1,0 +1,8 @@
+bars = 64
+bar_gap = 1
+framerate = 30
+
+color_mode = "solid"
+color = "#ffffff"
+color_low = "#ffffff"
+color_high = "#ffffff"

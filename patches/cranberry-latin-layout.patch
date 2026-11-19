@@ -1,0 +1,77 @@
+diff --git a/src/platform/macos/hotkeys.rs b/src/platform/macos/hotkeys.rs
+index fe3bf39..be72d25 100644
+--- a/src/platform/macos/hotkeys.rs
++++ b/src/platform/macos/hotkeys.rs
+@@ -17,8 +17,9 @@ use std::time::{Duration, Instant};
+ use log::{debug, info, warn};
+ 
+ use super::ffi::{
+-    AXIsProcessTrustedWithOptions, CFIndex, CFRelease, CFRunLoopAddSource, CFRunLoopGetCurrent,
+-    CFRunLoopRunInMode, CFStringRef, CFTypeRef, kCFRunLoopDefaultMode,
++    AXIsProcessTrustedWithOptions, CFArrayGetCount, CFArrayGetValueAtIndex, CFIndex, CFRelease,
++    CFRetain, CFRunLoopAddSource, CFRunLoopGetCurrent, CFRunLoopRunInMode, CFStringRef, CFTypeRef,
++    kCFRunLoopDefaultMode,
+ };
+ use super::string_value;
+ use crate::hotkeys::{Action, Held, Hotkeys};
+@@ -61,7 +62,7 @@ unsafe extern "C" {
+ #[cfg_attr(target_os = "macos", link(name = "Carbon", kind = "framework"))]
+ unsafe extern "C" {
+     fn TISCopyCurrentKeyboardLayoutInputSource() -> CFTypeRef;
+-    fn TISCopyCurrentASCIICapableKeyboardLayoutInputSource() -> CFTypeRef;
++    fn TISCreateInputSourceList(properties: *const c_void, include_all_installed: u8) -> CFTypeRef;
+     fn TISGetInputSourceProperty(source: CFTypeRef, key: CFStringRef) -> CFTypeRef;
+     fn UCKeyTranslate(
+         layout: *const c_void,
+@@ -139,13 +140,39 @@ fn held(flags: u64) -> Held {
+     }
+ }
+ 
++/// The Latin layout (ABC or US), retained: the caller releases it. Looked up
++/// by id rather than through the "ASCII capable" call, which can return the
++/// selected non-Latin layout (such as Russian). Null when neither is installed.
++unsafe fn latin_layout_source() -> CFTypeRef {
++    unsafe {
++        let list = TISCreateInputSourceList(ptr::null(), 1);
++        if list.is_null() {
++            return ptr::null();
++        }
++        let mut found: CFTypeRef = ptr::null();
++        for i in 0..CFArrayGetCount(list) {
++            let src = CFArrayGetValueAtIndex(list, i);
++            let id = string_value(TISGetInputSourceProperty(src, kTISPropertyInputSourceID))
++                .unwrap_or_default();
++            if id == "com.apple.keylayout.ABC" || id == "com.apple.keylayout.US" {
++                found = CFRetain(src);
++                break;
++            }
++        }
++        CFRelease(list);
++        found
++    }
++}
++
+ /// The current keyboard layout's id, and which key types each character
+ /// with no modifiers held. Must run on the main thread.
+ fn keyboard_layout() -> Option<(String, HashMap<char, u16>)> {
+     unsafe {
+-        // A layout that types Latin letters, even while an input method
+-        // for another script is selected.
+-        let mut source = TISCopyCurrentKeyboardLayoutInputSource();
++        // Always the Latin layout, whatever input source is selected: the
++        // binds are written in Latin letters, and a Cyrillic layout has no
++        // key that types them, so they would be dropped. The keys are
++        // matched by position, so the Latin map works on any layout.
++        let mut source = latin_layout_source();
+         let mut data = if source.is_null() {
+             ptr::null()
+         } else {
+@@ -155,7 +182,7 @@ fn keyboard_layout() -> Option<(String, HashMap<char, u16>)> {
+             if !source.is_null() {
+                 CFRelease(source);
+             }
+-            source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource();
++            source = TISCopyCurrentKeyboardLayoutInputSource();
+             if source.is_null() {
+                 return None;
+             }
