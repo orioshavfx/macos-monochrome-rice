@@ -39,6 +39,7 @@ fn main() -> Result<()> {
 
 fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App, poll: Duration) -> Result<()> {
     while !app.quit {
+        app.flush_pending();
         terminal.draw(|frame| ui::draw(frame, app))?;
         if event::poll(poll)? {
             if let Event::Key(key) = event::read()? {

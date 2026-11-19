@@ -9,6 +9,7 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 
 const SEP: char = '\u{1f}';
+const RS: char = '\u{1e}';
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlayerState {
@@ -133,15 +134,33 @@ pub fn parse_now_playing(reply: &str) -> Option<NowPlaying> {
     })
 }
 
-/// Parse a list of records separated by SEP, each record having `n` fields
-/// joined by SEP. Used for playlist names and track rows.
-pub fn parse_fields(reply: &str, n: usize) -> Vec<Vec<String>> {
+/// Split a SEP-joined list. An empty reply means an empty list.
+fn split_items(reply: &str) -> Vec<&str> {
     if reply.is_empty() {
+        Vec::new()
+    } else {
+        reply.split(SEP).collect()
+    }
+}
+
+/// Parse the reply of `playlist_tracks`: three SEP-joined blocks (titles,
+/// artists, durations) separated by RS.
+pub fn parse_track_blocks(reply: &str) -> Vec<TrackRow> {
+    let blocks: Vec<&str> = reply.split(RS).collect();
+    if blocks.len() < 3 {
         return Vec::new();
     }
-    let all: Vec<&str> = reply.split(SEP).collect();
-    all.chunks_exact(n)
-        .map(|c| c.iter().map(|s| s.to_string()).collect())
+    let titles = split_items(blocks[0]);
+    let artists = split_items(blocks[1]);
+    let durations = split_items(blocks[2]);
+    titles
+        .iter()
+        .enumerate()
+        .map(|(i, title)| TrackRow {
+            title: title.to_string(),
+            artist: artists.get(i).copied().unwrap_or("").to_string(),
+            duration: durations.get(i).map(|d| parse_f64(d)).unwrap_or(0.0),
+        })
         .collect()
 }
 
@@ -161,49 +180,45 @@ pub fn now_playing() -> Result<Option<NowPlaying>> {
 }
 
 /// Names of all user playlists, in the order Music.app shows them.
+/// One bulk property read, so it stays fast with many playlists.
 pub fn playlists() -> Result<Vec<String>> {
     let script = r#"
+set sep to (ASCII character 31)
+set AppleScript's text item delimiters to sep
 tell application "Music"
-    set sep to (ASCII character 31)
-    set out to ""
-    repeat with p in user playlists
-        set out to out & (name of p) & sep
-    end repeat
-    return out
+    set names to name of user playlists
 end tell
+set out to names as text
+set AppleScript's text item delimiters to ""
+return out
 "#;
     let reply = run(script)?;
-    Ok(reply
-        .split(SEP)
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .collect())
+    Ok(split_items(&reply).into_iter().map(String::from).collect())
 }
 
-/// Tracks of a playlist, for the track list.
+/// Tracks of a playlist. Titles, artists and durations are read as three bulk
+/// lists instead of one Apple event per track per field, which is what made
+/// large playlists slow.
 pub fn playlist_tracks(playlist: &str) -> Result<Vec<TrackRow>> {
     let script = format!(
         r#"
+set sep to (ASCII character 31)
+set rs to (ASCII character 30)
+set AppleScript's text item delimiters to sep
 tell application "Music"
-    set sep to (ASCII character 31)
-    set out to ""
-    repeat with t in tracks of user playlist "{}"
-        set out to out & (name of t) & sep & (artist of t) & sep & ((duration of t) as string) & sep
-    end repeat
-    return out
+    set pl to user playlist "{}"
+    set titles to name of tracks of pl
+    set artists to artist of tracks of pl
+    set durations to duration of tracks of pl
 end tell
+set out to (titles as text) & rs & (artists as text) & rs & (durations as text)
+set AppleScript's text item delimiters to ""
+return out
 "#,
         escape(playlist)
     );
     let reply = run(&script)?;
-    Ok(parse_fields(&reply, 3)
-        .into_iter()
-        .map(|f| TrackRow {
-            title: f[0].clone(),
-            artist: f[1].clone(),
-            duration: parse_f64(&f[2]),
-        })
-        .collect())
+    Ok(parse_track_blocks(&reply))
 }
 
 /// Lyrics of the current track. Music.app returns them only for tracks that are
@@ -323,11 +338,31 @@ mod tests {
     }
 
     #[test]
-    fn parses_track_rows() {
-        let s = ["A", "x", "180", "B", "y", "200"].join(&SEP.to_string());
-        let rows = parse_fields(&s, 3);
+    fn parses_track_blocks() {
+        let titles = ["A", "B"].join(&SEP.to_string());
+        let artists = ["x", "y"].join(&SEP.to_string());
+        let durations = ["180", "200.5"].join(&SEP.to_string());
+        let reply = [titles, artists, durations].join(&RS.to_string());
+        let rows = parse_track_blocks(&reply);
         assert_eq!(rows.len(), 2);
-        assert_eq!(rows[1][0], "B");
+        assert_eq!(rows[1].title, "B");
+        assert_eq!(rows[1].artist, "y");
+        assert_eq!(rows[1].duration, 200.5);
+    }
+
+    #[test]
+    fn empty_playlist_gives_no_rows() {
+        assert!(parse_track_blocks(&format!("{RS}{RS}")).is_empty());
+        assert!(parse_track_blocks("").is_empty());
+    }
+
+    #[test]
+    fn splits_playlist_names() {
+        assert_eq!(split_items(""), Vec::<&str>::new());
+        assert_eq!(
+            split_items(&["One", "Two"].join(&SEP.to_string())),
+            vec!["One", "Two"]
+        );
     }
 
     #[test]

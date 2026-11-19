@@ -15,6 +15,8 @@ const SEEK_STEP: f64 = 5.0;
 const ADVANCE_WINDOW: f64 = 1.5;
 /// Minimum time between two queue advances, so one track is never skipped twice.
 const ADVANCE_COOLDOWN: Duration = Duration::from_secs(3);
+/// The track list is loaded once the playlist cursor has rested this long.
+const TRACK_DEBOUNCE: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
@@ -54,6 +56,8 @@ pub struct App {
     pub tracks_of: Option<String>,
     pub tracks: Vec<TrackRow>,
     pub track_state: ListState,
+    /// When the playlist cursor last moved; the track list loads after a pause.
+    tracks_pending: Option<Instant>,
 
     pub queue: Vec<QueueItem>,
     last_advance: Option<Instant>,
@@ -104,6 +108,7 @@ impl App {
             tracks_of: None,
             tracks: Vec::new(),
             track_state: ListState::default(),
+            tracks_pending: None,
             queue: Vec::new(),
             last_advance: None,
             status: None,
@@ -196,6 +201,17 @@ impl App {
             } else {
                 Some(0)
             });
+        }
+    }
+
+    /// Load the track list once the playlist cursor has been still for a moment.
+    /// Called from the main loop on every iteration; cheap when nothing is pending.
+    pub fn flush_pending(&mut self) {
+        if let Some(since) = self.tracks_pending {
+            if since.elapsed() >= TRACK_DEBOUNCE {
+                self.tracks_pending = None;
+                self.load_selected_playlist_tracks();
+            }
         }
     }
 
@@ -330,6 +346,10 @@ impl App {
                 Focus::Playlists => Focus::Tracks,
                 Focus::Tracks => Focus::Playlists,
             };
+            if self.focus == Focus::Tracks {
+                self.tracks_pending = None;
+                self.load_selected_playlist_tracks();
+            }
         } else if m(k.up) {
             self.move_selection(-1);
         } else if m(k.down) {
@@ -344,7 +364,7 @@ impl App {
             Focus::Playlists => {
                 let len = self.playlists.len();
                 step(&mut self.playlist_state, len, delta);
-                self.load_selected_playlist_tracks();
+                self.tracks_pending = Some(Instant::now());
             }
             Focus::Tracks => {
                 let len = self.tracks.len();
@@ -501,6 +521,17 @@ mod tests {
         a.queue = vec![queued("1"), queued("2")];
         a.tick();
         assert_eq!(a.queue.len(), 2);
+    }
+
+    #[test]
+    fn moving_playlist_cursor_defers_track_loading() {
+        let mut a = app();
+        a.focus = Focus::Playlists;
+        a.handle_key(press(KeyCode::Char('j')));
+        assert!(a.tracks_pending.is_some());
+        a.tracks_pending = Some(Instant::now() - Duration::from_secs(1));
+        a.flush_pending();
+        assert!(a.tracks_pending.is_none());
     }
 
     #[test]
