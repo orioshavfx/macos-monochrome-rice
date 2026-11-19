@@ -61,6 +61,7 @@ pub struct App {
 
     pub queue: Vec<QueueItem>,
     last_advance: Option<Instant>,
+    last_playlist_try: Option<Instant>,
 
     /// Last error or hint, shown in the footer.
     pub status: Option<String>,
@@ -111,6 +112,7 @@ impl App {
             tracks_pending: None,
             queue: Vec::new(),
             last_advance: None,
+            last_playlist_try: None,
             status: None,
             quit: false,
         }
@@ -127,10 +129,7 @@ impl App {
 
     fn report<T>(&mut self, result: anyhow::Result<T>) -> Option<T> {
         match result {
-            Ok(v) => {
-                self.status = None;
-                Some(v)
-            }
+            Ok(v) => Some(v),
             Err(e) => {
                 self.status = Some(format!("{e:#}"));
                 None
@@ -161,6 +160,7 @@ impl App {
     pub fn refresh_playlists(&mut self) {
         if let Some(list) = self.report(music::playlists()) {
             self.playlists = list;
+            self.status = None;
             if self.playlists.is_empty() {
                 self.playlist_state.select(None);
             } else if self.playlist_state.selected().is_none() {
@@ -217,6 +217,15 @@ impl App {
 
     /// Periodic refresh. Also starts the next queued track when the current one is ending.
     pub fn tick(&mut self) {
+        // Retry the playlist list while it is empty, e.g. after a failed start-up read.
+        if self.playlists.is_empty()
+            && self
+                .last_playlist_try
+                .is_none_or(|t| t.elapsed() >= Duration::from_secs(5))
+        {
+            self.last_playlist_try = Some(Instant::now());
+            self.refresh_playlists();
+        }
         if !self.refresh_now() || self.queue.is_empty() {
             return;
         }
@@ -253,6 +262,7 @@ impl App {
     /// Run a command against Music.app and refresh the state afterwards.
     fn act(&mut self, result: anyhow::Result<()>) {
         if self.report(result).is_some() {
+            self.status = None;
             self.refresh_now();
         }
     }

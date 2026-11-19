@@ -180,16 +180,15 @@ pub fn now_playing() -> Result<Option<NowPlaying>> {
 }
 
 /// Names of all user playlists, in the order Music.app shows them.
-/// One bulk property read, so it stays fast with many playlists.
 pub fn playlists() -> Result<Vec<String>> {
     let script = r#"
 set sep to (ASCII character 31)
-set AppleScript's text item delimiters to sep
+set out to ""
 tell application "Music"
-    set names to name of user playlists
+    repeat with p in user playlists
+        set out to out & (name of p) & sep
+    end repeat
 end tell
-set out to names as text
-set AppleScript's text item delimiters to ""
 return out
 "#;
     let reply = run(script)?;
