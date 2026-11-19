@@ -2,6 +2,12 @@
 
 A monochrome macOS terminal setup: black, white and greys only.
 
+## Screenshots
+
+![btop, fastfetch and Claude Code in greys](docs/img/overview.png)
+
+![Apple Music in the terminal, cmatrix, sysviz and tty-clock](docs/img/music-and-cmatrix.png)
+
 - **kitty**: terminal, Hasklug Nerd Font, translucent background, grey theme
 - **fish**: shell with fastfetch on start and short aliases (`ls` = lsd, `cat` = bat, `grep` = rg, ...)
 - **cberry** ([cranberry](https://github.com/emreekici3/cranberry)): tiling window manager, with a small patch so binds work while a non-Latin layout (e.g. Russian) is selected
