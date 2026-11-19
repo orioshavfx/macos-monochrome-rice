@@ -71,7 +71,7 @@ final class FastfetchPage: NSView {
     }
 
     /// One checkbox per module, one under the other in fastfetch's order, with card padding.
-    /// (One column: the drawer is about 60% of a quarter-screen window wide.)
+    /// (One column: the drawer is about 60% of a third-screen window wide.)
     private func buildModuleGrid() -> NSView {
         var boxes: [NSButton] = []
         for module in FastfetchConf.modules {

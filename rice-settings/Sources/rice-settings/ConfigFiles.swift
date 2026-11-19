@@ -792,8 +792,8 @@ extension CberryRc {
     /// cberry matches a rule against the window owner name (kCGWindowOwnerName), which for this
     /// SwiftPM executable is its process name.
     static let windowRuleApp = "rice-settings"
-    /// The centre quarter of the screen.
-    static let windowRuleGrid = "4:4:1:1:2:2"
+    /// The centre third of the screen.
+    static let windowRuleGrid = "3:3:1:1:1:1"
     /// Written in the quoting style of the existing `cberry rule float "wallpicker"` line.
     static let windowRuleLine = "cberry rule grid \(windowRuleGrid) \"\(windowRuleApp)\""
 

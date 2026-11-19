@@ -25,11 +25,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             FastfetchPage(),
             AppPage(),
         ]
-        // Always a quarter of the screen (half its width, half its height), centred, not resizable,
+        // Always a third of the screen (a third of its width, a third of its height), centred, not resizable,
         // floating above other windows. With the cberry rule on, cberry floats it in the same place.
         let screen = NSScreen.main ?? NSScreen.screens.first
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1470, height: 920)
-        let size = NSSize(width: (visible.width / 2).rounded(), height: (visible.height / 2).rounded())
+        let size = NSSize(width: (visible.width / 3).rounded(), height: (visible.height / 3).rounded())
         let frame = NSRect(x: (visible.midX - size.width / 2).rounded(),
                            y: (visible.midY - size.height / 2).rounded(),
                            width: size.width, height: size.height)

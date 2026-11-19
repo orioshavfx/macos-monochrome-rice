@@ -99,7 +99,7 @@ cberry bind 'alt - 0 : cberry balance'
 cberry bind 'alt - m : cberry zoom'
 # Выбор обоев (opt+w): плавающее окно, не плитка.
 cberry rule float "wallpicker"
-cberry rule grid 4:4:1:1:2:2 "rice-settings"
+cberry rule grid 3:3:1:1:1:1 "rice-settings"
 cberry bind 'alt - w : ~/bin/wallpicker'
 cberry bind 'alt - u : open ~/Applications/rice-settings.app'
 
