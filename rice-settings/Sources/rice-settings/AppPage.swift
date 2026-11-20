@@ -31,13 +31,13 @@ final class AppPage: NSView {
         ruleToggle.action = #selector(ruleChanged(_:))
 
         let appearanceCard = CardView(rows: [
-            PageKit.settingRow("Accent colour", "Takes effect on the next launch.", [accentHex, accentWell]),
+            PageKit.settingRow("Accent colour", "Takes effect on the next launch.", [accentHex, accentWell], symbol: "paintpalette"),
         ])
         let windowCard = CardView(rows: [
             PageKit.settingRow("Open centred and floating in cberry",
                                "On adds cberry rule grid \(CberryRc.windowRuleGrid) \"\(CberryRc.windowRuleApp)\" "
                                    + "to cberryrc and runs cberry reload; off removes that line.",
-                               [ruleToggle]),
+                               [ruleToggle], symbol: "macwindow"),
         ])
         let tabs = [
             PageTab(name: "App",
@@ -50,7 +50,7 @@ final class AppPage: NSView {
                                         [windowCard]),
                     ]),
         ]
-        PageKit.embed(TabbedPageView(title: "App", tabs: tabs, status: status), in: self)
+        PageKit.embed(TabbedPageView(title: "App", tabs: tabs, status: status, kicker: "Rice Settings"), in: self)
     }
 
     // MARK: - Accent

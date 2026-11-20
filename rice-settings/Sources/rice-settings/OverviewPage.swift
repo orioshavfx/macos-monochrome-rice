@@ -4,8 +4,13 @@ import AppKit
 /// and which of its command-line parts are installed in ~/bin.
 /// The commit and build time are written into the app's Info.plist by install.sh and build.sh.
 final class OverviewPage: NSView {
-    /// The parts installed into ~/bin, in the order of the installer's steps.
-    private static let parts = ["cberry", "musicplayer", "sysviz", "wallpicker"]
+    /// The parts installed into ~/bin, in the order of the installer's steps, with an icon each.
+    private static let parts: [(name: String, symbol: String)] = [
+        ("cberry", "square.grid.2x2"),
+        ("musicplayer", "music.note"),
+        ("sysviz", "waveform"),
+        ("wallpicker", "photo.on.rectangle"),
+    ]
 
     init() {
         super.init(frame: .zero)
@@ -21,19 +26,19 @@ final class OverviewPage: NSView {
         let built = info["RiceBuildDate"] as? String ?? "unknown"
 
         let buildCard = CardView(rows: [
-            Self.infoRow("Version", version),
-            Self.infoRow("Commit", commit),
-            Self.infoRow("Built", built),
-            Self.infoRow("macOS", ProcessInfo.processInfo.operatingSystemVersionString),
+            Self.infoRow("Version", version, symbol: "tag"),
+            Self.infoRow("Commit", commit, symbol: "number"),
+            Self.infoRow("Built", built, symbol: "clock"),
+            Self.infoRow("macOS", ProcessInfo.processInfo.operatingSystemVersionString, symbol: "laptopcomputer"),
         ])
 
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let installedCard = CardView(rows: Self.parts.map { name -> NSView in
-            let present = FileManager.default.fileExists(atPath: home.appendingPathComponent("bin/\(name)").path)
+        let installedCard = CardView(rows: Self.parts.map { part -> NSView in
+            let present = FileManager.default.fileExists(atPath: home.appendingPathComponent("bin/\(part.name)").path)
             let state = NSTextField(labelWithString: present ? "Installed" : "Missing")
             state.font = .systemFont(ofSize: 13, weight: .medium)
             state.textColor = present ? .labelColor : .secondaryLabelColor
-            return PageKit.settingRow(name, "~/bin/\(name)", [state])
+            return PageKit.settingRow(part.name, "~/bin/\(part.name)", [state], symbol: part.symbol)
         })
 
         let tabs = [
@@ -49,11 +54,11 @@ final class OverviewPage: NSView {
                     ]),
         ]
         let status = NSTextField(wrappingLabelWithString: "")
-        PageKit.embed(TabbedPageView(title: "Rice Settings", tabs: tabs, status: status), in: self)
+        PageKit.embed(TabbedPageView(title: "Overview", tabs: tabs, status: status, kicker: "Rice Settings"), in: self)
     }
 
     /// A card row with a value on the right; the value is cut at the tail when the window is narrow.
-    private static func infoRow(_ title: String, _ value: String) -> NSView {
+    private static func infoRow(_ title: String, _ value: String, symbol: String) -> NSView {
         let label = NSTextField(labelWithString: value)
         label.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
         label.textColor = .secondaryLabelColor
@@ -61,6 +66,6 @@ final class OverviewPage: NSView {
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 1
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        return PageKit.settingRow(title, "", [label])
+        return PageKit.settingRow(title, "", [label], symbol: symbol)
     }
 }

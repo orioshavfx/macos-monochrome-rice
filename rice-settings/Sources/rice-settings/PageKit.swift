@@ -114,6 +114,11 @@ final class SidebarItem: FillView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    /// True when the query is in the row's name or description (lower case, already trimmed).
+    func matches(_ query: String) -> Bool {
+        titleLabel.stringValue.lowercased().contains(query) || detailLabel.stringValue.lowercased().contains(query)
+    }
+
     private func restyle() {
         fillColor = isSelected ? Theme.selectedFill : .clear
         iconTile.fillColor = isSelected ? Theme.accent : Theme.controlFill
@@ -240,8 +245,10 @@ final class TabBar: NSView {
 private final class SegmentItem: FillView {
     var onClick: (() -> Void)?
     let label: NSTextField
+    let title: String
 
     init(title: String) {
+        self.title = title
         label = NSTextField(labelWithString: title)
         super.init(frame: .zero)
         cornerRadius = 12
@@ -325,6 +332,7 @@ final class CapsuleSegments: FillView {
             let on = i == selectedSegment
             item.fillColor = on ? Theme.accent : .clear
             item.label.textColor = on ? Theme.onAccent : .labelColor
+            item.label.stringValue = on ? "✓ \(item.title)" : item.title
         }
         alphaValue = isEnabled ? 1 : 0.4
     }
@@ -733,10 +741,12 @@ final class TabbedPageView: NSView {
     private var tabBar: TabBar?
 
     /// `showsTabBar: false` hides the tab bar; the page then switches tabs itself with selectTab(_:).
-    init(title: String, tabs: [PageTab], accessory: NSView? = nil, status: NSTextField, showsTabBar: Bool = true) {
+    /// `kicker` is a small uppercase line above the title (the app or section it belongs to); nil for none.
+    init(title: String, tabs: [PageTab], accessory: NSView? = nil, status: NSTextField, showsTabBar: Bool = true,
+         kicker: String? = nil) {
         self.tabs = tabs
         super.init(frame: .zero)
-        build(title, accessory, status, showsTabBar)
+        build(title, kicker, accessory, status, showsTabBar)
         selectTab(0)
     }
 
@@ -751,10 +761,10 @@ final class TabbedPageView: NSView {
         onSelect?(index)
     }
 
-    private func build(_ title: String, _ accessory: NSView?, _ status: NSTextField, _ showsTabBar: Bool) {
+    private func build(_ title: String, _ kicker: String?, _ accessory: NSView?, _ status: NSTextField, _ showsTabBar: Bool) {
         let margin = Theme.pageMargin
         let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = .systemFont(ofSize: 22, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 26, weight: .medium)
         titleLabel.textColor = .labelColor
         subtitleLabel.font = .systemFont(ofSize: 13)
         subtitleLabel.textColor = .secondaryLabelColor
@@ -764,7 +774,17 @@ final class TabbedPageView: NSView {
         header.orientation = .vertical
         header.alignment = .leading
         header.spacing = 4
-        header.setViews([titleLabel, subtitleLabel], in: .top)
+        var headerViews: [NSView] = [titleLabel, subtitleLabel]
+        if let kicker = kicker {
+            let kickerLabel = NSTextField(labelWithString: "")
+            kickerLabel.attributedStringValue = NSAttributedString(string: kicker.uppercased(), attributes: [
+                .kern: 1.2,
+                .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ])
+            headerViews.insert(kickerLabel, at: 0)
+        }
+        header.setViews(headerViews, in: .top)
         header.translatesAutoresizingMaskIntoConstraints = false
         addSubview(header)
 
@@ -926,7 +946,7 @@ enum PageKit {
     /// A card row: title (15 pt medium) and detail (12 pt secondary) on the left, `controls` on the right.
     /// `detailLabel` is used instead of a new label when the page updates the detail text later.
     static func settingRow(_ title: String, _ detail: String = "", _ controls: [NSView],
-                           detailLabel: NSTextField? = nil) -> NSView {
+                           detailLabel: NSTextField? = nil, symbol: String? = nil) -> NSView {
         let titleLabel = NSTextField(labelWithString: title)
         titleLabel.font = .systemFont(ofSize: 15, weight: .medium)
         titleLabel.textColor = .labelColor
@@ -950,7 +970,39 @@ enum PageKit {
             detailView.translatesAutoresizingMaskIntoConstraints = false
             detailView.widthAnchor.constraint(equalTo: left.widthAnchor).isActive = true
         }
-        return row(left: left, controls: controls)
+        guard let symbol = symbol else {
+            return row(left: left, controls: controls)
+        }
+        let pair = NSStackView()
+        pair.orientation = .horizontal
+        pair.alignment = .centerY
+        pair.spacing = 12
+        pair.setViews([iconTile(symbol), left], in: .leading)
+        return row(left: pair, controls: controls)
+    }
+
+    /// A 28 pt rounded tile with an SF Symbol, placed at the start of a row.
+    static func iconTile(_ symbol: String) -> NSView {
+        let tile = FillView()
+        tile.fillColor = Theme.controlFill
+        tile.cornerRadius = 8
+        let imageView = NSImageView()
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .medium)
+        imageView.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(config)
+        imageView.contentTintColor = .labelColor
+        imageView.imageScaling = .scaleProportionallyDown
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        tile.translatesAutoresizingMaskIntoConstraints = false
+        tile.addSubview(imageView)
+        NSLayoutConstraint.activate([
+            tile.widthAnchor.constraint(equalToConstant: 28),
+            tile.heightAnchor.constraint(equalToConstant: 28),
+            imageView.centerXAnchor.constraint(equalTo: tile.centerXAnchor),
+            imageView.centerYAnchor.constraint(equalTo: tile.centerYAnchor),
+            imageView.widthAnchor.constraint(equalToConstant: 16),
+            imageView.heightAnchor.constraint(equalToConstant: 16),
+        ])
+        return tile
     }
 
     /// A card row with any view on the left and `controls` on the right; at least 52 pt high,

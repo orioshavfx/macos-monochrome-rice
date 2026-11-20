@@ -36,7 +36,7 @@ final class WallpaperPage: NSView {
         let chooseButton = NSButton(title: "Choose…", target: self, action: #selector(chooseFolder(_:)))
         let defaultButton = NSButton(title: "Default", target: self, action: #selector(useDefaultFolder(_:)))
         let folderCard = CardView(rows: [
-            PageKit.settingRow("Folder", "", [defaultButton, chooseButton], detailLabel: folderDetail),
+            PageKit.settingRow("Folder", "", [defaultButton, chooseButton], detailLabel: folderDetail, symbol: "folder"),
         ])
 
         accentWell.color = NSColor(hex: savedAccent) ?? .white
@@ -47,7 +47,7 @@ final class WallpaperPage: NSView {
         let accentCard = CardView(rows: [
             PageKit.settingRow("Accent colour",
                                "The border of the selected picture and its name. Takes effect the next time opt+w opens.",
-                               [accentHex, accentWell]),
+                               [accentHex, accentWell], symbol: "paintpalette"),
         ])
 
         let tabs = [
@@ -61,7 +61,7 @@ final class WallpaperPage: NSView {
                     ]),
         ]
         status.stringValue = ""
-        PageKit.embed(TabbedPageView(title: "Wallpaper", tabs: tabs, status: status), in: self)
+        PageKit.embed(TabbedPageView(title: "Wallpaper", tabs: tabs, status: status, kicker: "Wallpicker · opt+w"), in: self)
     }
 
     // MARK: - Folder

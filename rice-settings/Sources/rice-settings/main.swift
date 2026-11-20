@@ -28,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let content = NSView()
     private var pages: [NSView] = []
     private var items: [SidebarItem] = []
+    /// Each sidebar group's card with its rows, so a search can hide a card when none of its rows match.
+    private var groupCards: [(card: FillView, items: [SidebarItem])] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         pages = [
@@ -80,6 +82,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         column.alignment = .leading
         column.spacing = 14
         column.translatesAutoresizingMaskIntoConstraints = false
+
+        let search = NSSearchField()
+        search.placeholderString = "Search settings"
+        search.sendsSearchStringImmediately = true
+        search.target = self
+        search.action = #selector(searchChanged(_:))
+        search.translatesAutoresizingMaskIntoConstraints = false
+        search.heightAnchor.constraint(equalToConstant: 30).isActive = true
+        column.addView(search, in: .top)
+        search.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true
         for group in groups {
             let card = FillView()
             card.fillColor = Theme.cardFill
@@ -110,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 item.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
             }
             column.addView(card, in: .top)
+            groupCards.append((card: card, items: groupItems))
             card.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true
         }
 
@@ -136,6 +149,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             content.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
         return root
+    }
+
+    /// Shows only the sidebar rows whose name or description contains the text typed in the search field.
+    @objc private func searchChanged(_ sender: NSSearchField) {
+        let query = sender.stringValue.trimmingCharacters(in: .whitespaces).lowercased()
+        for group in groupCards {
+            var anyVisible = false
+            for item in group.items {
+                item.isHidden = !query.isEmpty && !item.matches(query)
+                if !item.isHidden { anyVisible = true }
+            }
+            group.card.isHidden = !anyVisible
+        }
     }
 
     private func showSection(_ index: Int) {
