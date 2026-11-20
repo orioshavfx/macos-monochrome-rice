@@ -50,43 +50,61 @@ final class Hairline: NSView {
 
 // MARK: - Sidebar
 
-/// One row of the sidebar: an SF Symbol and the section name side by side, 30 pt high.
-/// The selected row gets a light fill behind it.
+/// One sidebar row, as in System Settings: a rounded icon tile, the section name and a short description.
+/// The selected row gets a light fill; the rows of a group sit on one card (see RiceSidebar).
 final class SidebarItem: FillView {
     var onClick: (() -> Void)?
     var isSelected = false { didSet { restyle() } }
 
+    private let iconTile = FillView()
     private let imageView = NSImageView()
-    private let label: NSTextField
+    private let titleLabel: NSTextField
+    private let detailLabel: NSTextField
 
-    init(title: String, symbol: String) {
-        label = NSTextField(labelWithString: title)
+    init(title: String, detail: String, symbol: String) {
+        titleLabel = NSTextField(labelWithString: title)
+        detailLabel = NSTextField(labelWithString: detail)
         super.init(frame: .zero)
 
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
             ?? NSImage(systemSymbolName: "gearshape", accessibilityDescription: title)
-        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
         imageView.image = image?.withSymbolConfiguration(config) ?? image
         imageView.imageScaling = .scaleProportionallyDown
+        iconTile.cornerRadius = 8
 
-        cornerRadius = 8
-        label.font = .systemFont(ofSize: 13, weight: .medium)
-        label.lineBreakMode = .byTruncatingTail
-        label.toolTip = title
+        cornerRadius = 10
+        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.lineBreakMode = .byTruncatingTail
+        detailLabel.font = .systemFont(ofSize: 11)
+        detailLabel.lineBreakMode = .byTruncatingTail
+        toolTip = title
 
-        for view in [imageView, label] as [NSView] {
+        let texts = NSStackView()
+        texts.orientation = .vertical
+        texts.alignment = .leading
+        texts.spacing = 1
+        texts.setViews([titleLabel, detailLabel], in: .top)
+
+        for view in [iconTile, imageView, texts] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
+        iconTile.addSubview(imageView)
+        imageView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 30),
-            imageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            imageView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            heightAnchor.constraint(equalToConstant: 48),
+            iconTile.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            iconTile.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconTile.widthAnchor.constraint(equalToConstant: 30),
+            iconTile.heightAnchor.constraint(equalToConstant: 30),
+            imageView.centerXAnchor.constraint(equalTo: iconTile.centerXAnchor),
+            imageView.centerYAnchor.constraint(equalTo: iconTile.centerYAnchor),
             imageView.widthAnchor.constraint(equalToConstant: 18),
             imageView.heightAnchor.constraint(equalToConstant: 18),
-            label.leadingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: 9),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            texts.leadingAnchor.constraint(equalTo: iconTile.trailingAnchor, constant: 10),
+            texts.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
+            texts.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
@@ -98,8 +116,10 @@ final class SidebarItem: FillView {
 
     private func restyle() {
         fillColor = isSelected ? Theme.selectedFill : .clear
-        imageView.contentTintColor = isSelected ? .labelColor : .secondaryLabelColor
-        label.textColor = isSelected ? .labelColor : .secondaryLabelColor
+        iconTile.fillColor = isSelected ? Theme.accent : Theme.controlFill
+        imageView.contentTintColor = isSelected ? Theme.onAccent : .labelColor
+        titleLabel.textColor = .labelColor
+        detailLabel.textColor = .secondaryLabelColor
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {

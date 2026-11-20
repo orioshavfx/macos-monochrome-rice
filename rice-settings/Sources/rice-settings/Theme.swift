@@ -27,7 +27,7 @@ enum Theme {
     static let pageMargin: CGFloat = 20
     /// Room above the page title; the window buttons sit over the sidebar, not over the page.
     static let titlebarInset: CGFloat = 16
-    static let sidebarWidth: CGFloat = 190
+    static let sidebarWidth: CGFloat = 230
 
     /// WCAG relative luminance of a colour, 0 (black) to 1 (white).
     static func relativeLuminance(_ color: NSColor) -> CGFloat {

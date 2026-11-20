@@ -10,10 +10,21 @@ final class RiceWindow: NSWindow {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
-    /// Sidebar names and their SF Symbols, in sidebar order; pages[i] belongs to sections[i].
-    private let sections = ["Overview", "Terminal", "WM (Cranberry)", "Wallpaper", "sysviz", "fastfetch", "App"]
-    private let symbols = ["house", "terminal", "square.grid.2x2", "photo.on.rectangle", "waveform", "info.circle",
-                           "slider.horizontal.3"]
+    /// The sidebar: groups of rows, each group on one card. The rows, in order, are the pages:
+    /// pages[i] belongs to the i-th row. Title, description and SF Symbol per row.
+    private let groups: [[(title: String, detail: String, symbol: String)]] = [
+        [("Overview", "Build and installed parts", "house")],
+        [
+            ("Terminal", "kitty, fish, fonts", "terminal"),
+            ("WM (Cranberry)", "Tiling, gaps and binds", "square.grid.2x2"),
+            ("Wallpaper", "Folder and carousel colour", "photo.on.rectangle"),
+        ],
+        [
+            ("sysviz", "Audio visualiser", "waveform"),
+            ("fastfetch", "System info lines", "info.circle"),
+        ],
+        [("App", "Accent colour and window", "slider.horizontal.3")],
+    ]
     private let content = NSView()
     private var pages: [NSView] = []
     private var items: [SidebarItem] = []
@@ -63,20 +74,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         root.blendingMode = .behindWindow
         root.state = .active
 
-        for (index, title) in sections.enumerated() {
-            let item = SidebarItem(title: title, symbol: symbols[index])
-            item.onClick = { [weak self] in self?.showSection(index) }
-            items.append(item)
-        }
-        // A vertical list of rows: each row is as wide as the column.
+        // Each group is a card; its rows are SidebarItems, numbered in reading order.
         let column = NSStackView()
         column.orientation = .vertical
         column.alignment = .leading
-        column.spacing = 2
-        column.setViews(items, in: .top)
+        column.spacing = 14
         column.translatesAutoresizingMaskIntoConstraints = false
-        for item in items {
-            item.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true
+        for group in groups {
+            let card = FillView()
+            card.fillColor = Theme.cardFill
+            card.cornerRadius = Theme.cardRadius
+            card.translatesAutoresizingMaskIntoConstraints = false
+            let rows = NSStackView()
+            rows.orientation = .vertical
+            rows.alignment = .leading
+            rows.spacing = 2
+            rows.translatesAutoresizingMaskIntoConstraints = false
+            var groupItems: [SidebarItem] = []
+            for entry in group {
+                let index = items.count
+                let item = SidebarItem(title: entry.title, detail: entry.detail, symbol: entry.symbol)
+                item.onClick = { [weak self] in self?.showSection(index) }
+                items.append(item)
+                groupItems.append(item)
+            }
+            rows.setViews(groupItems, in: .top)
+            card.addSubview(rows)
+            NSLayoutConstraint.activate([
+                rows.topAnchor.constraint(equalTo: card.topAnchor, constant: 4),
+                rows.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 4),
+                rows.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -4),
+                rows.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -4),
+            ])
+            for item in groupItems {
+                item.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
+            }
+            column.addView(card, in: .top)
+            card.widthAnchor.constraint(equalTo: column.widthAnchor).isActive = true
         }
 
         let divider = FillView()
@@ -90,8 +124,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSLayoutConstraint.activate([
             // Below the window buttons, which sit over the sidebar.
             column.topAnchor.constraint(equalTo: root.topAnchor, constant: 44),
-            column.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 10),
-            column.trailingAnchor.constraint(equalTo: divider.leadingAnchor, constant: -10),
+            column.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 12),
+            column.trailingAnchor.constraint(equalTo: divider.leadingAnchor, constant: -12),
             divider.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: Theme.sidebarWidth),
             divider.topAnchor.constraint(equalTo: root.topAnchor),
             divider.bottomAnchor.constraint(equalTo: root.bottomAnchor),

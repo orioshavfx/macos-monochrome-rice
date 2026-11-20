@@ -299,8 +299,9 @@ final class CarouselView: NSView {
         close()
     }
 
+    /// Exits at once: nothing is saved on the way out, so there is nothing to wait for.
     private func close() {
-        NSApp.terminate(nil)
+        exit(0)
     }
 
     private func move(_ step: Int) {
@@ -396,8 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Escape closes whichever view has focus: this sees every key press while wallpicker is active.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 {
-                NSApp.terminate(nil)
-                return nil
+                exit(0)
             }
             return event
         }
