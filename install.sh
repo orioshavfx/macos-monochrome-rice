@@ -331,6 +331,22 @@ run "recording rice-settings.app" touch "$STATE_DIR/rice-settings.app.installed"
 info "installed  $APP"
 
 # ---------------------------------------------------------------------------
+step "Building wallpicker"
+# Not fatal: without it only opt+w does nothing, the rest of the rice works.
+src="$WORK/wallpicker"
+run "copying wallpicker sources" cp -R "$REPO_DIR/wallpicker" "$src"
+if run_long "swift build of wallpicker" swift build -c release --package-path "$src"; then
+    if wp_bin="$(cd "$src" && swift build -c release --show-bin-path)/wallpicker" \
+        && install_binary "$wp_bin" wallpicker; then
+        :
+    else
+        warn "wallpicker was built but could not be installed; opt+w will do nothing."
+    fi
+else
+    warn "wallpicker did not build; opt+w will do nothing. Re-run the installer after fixing it."
+fi
+
+# ---------------------------------------------------------------------------
 step "Installing configs"
 while IFS= read -r -d '' file; do
     rel="${file#"$REPO_DIR/configs/"}"
