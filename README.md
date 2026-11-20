@@ -44,7 +44,7 @@ The script is safe to run again. It may ask for your password (Homebrew installe
 | Homebrew (if missing, official installer from brew.sh) | `/opt/homebrew` |
 | Brewfile: fish, fastfetch, cmatrix, bat, fd, lsd, btop, tty-clock, neovim, ripgrep, zoxide, mole, go, rust; casks kitty, zotero, font-hasklug-nerd-font | Homebrew |
 | fisher (fetched from GitHub) and the plugins in `configs/fish/fish_plugins` | `~/.config/fish` |
-| `cberry`, built from cranberry `42b5ed9` + `patches/cranberry-latin-layout.patch` | `~/bin/cberry` |
+| `cberry`, built from cranberry `42b5ed9` + `patches/cranberry-latin-layout.patch` + `patches/cranberry-split-by-size.patch` | `~/bin/cberry` |
 | `musicplayer`, built from AppleMusicTUI `eb796cc` + `patches/applemusictui.patch` | `~/bin/musicplayer` |
 | `sysviz`, built from sysviz `v0.2.0` | `~/bin/sysviz` |
 | Rice Settings app (sources in `rice-settings/`) | `~/Applications/rice-settings.app`, sources in `~/bin/rice-settings` |

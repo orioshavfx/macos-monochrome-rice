@@ -10,8 +10,10 @@ cberry config padding 10 10 10 10
 # Windows slide into place (0.25 s, macOS's curve), or jump with off.
 cberry config animation on
 
-# Share the old window keeps when a new one splits it.
+# Share the old window keeps when a new one splits it (used when split_by_size is off).
 cberry config split_ratio 0.5
+# Новое окно берёт свой размер (но не больше половины плитки), а не делит 50/50.
+cberry config split_by_size on
 
 # Новое окно делит самую большую плитку, а не сфокусированное:
 # 2 окна -> половина + половина, 3 -> половина + два квадранта, 4 -> квадранты слева и справа.

@@ -1,0 +1,213 @@
+diff --git a/src/bsp.rs b/src/bsp.rs
+index e48eef5..3ff257d 100644
+--- a/src/bsp.rs
++++ b/src/bsp.rs
+@@ -194,6 +194,18 @@ fn carve(windows: &mut [(WinId, Rect)], area: Rect, gap: i32) -> Option<Node> {
+ 
+ /// Splits `area` into the two child areas of a split node, leaving `gap`
+ /// points between them.
++/// The share a target keeps when a new window that wants `take` pixels along
++/// the split takes a slot of `slot` pixels. The new window gets its size, but
++/// never more than half the usable length. `None` when there is nothing to go on.
++fn sized_ratio(slot: i32, take: i32, gap: i32) -> Option<f32> {
++    let usable = slot - gap;
++    if usable <= 0 || take <= 0 {
++        return None;
++    }
++    let new = take.min(usable / 2);
++    Some((usable - new) as f32 / usable as f32)
++}
++
+ pub fn split_rect(area: Rect, split: Split, ratio: f32, gap: i32) -> (Rect, Rect) {
+     match split {
+         Split::Columns => {
+@@ -334,6 +346,21 @@ impl BspTree {
+         area: Rect,
+         gap: i32,
+         ratio: f32,
++    ) -> bool {
++        self.insert_sized(new, target, area, gap, ratio, None)
++    }
++
++    /// As `insert`. With `want` (the new window's own size), the new window
++    /// keeps that size along the split, up to half the target's slot, and the
++    /// target keeps the rest. Without it the split is at `ratio`.
++    pub fn insert_sized(
++        &mut self,
++        new: WinId,
++        target: Option<WinId>,
++        area: Rect,
++        gap: i32,
++        ratio: f32,
++        want: Option<(i32, i32)>,
+     ) -> bool {
+         if self.contains(new) {
+             return false;
+@@ -379,6 +406,15 @@ impl BspTree {
+             _ => Split::Rows,
+         };
+ 
++        // The new window takes its own size along the split, at most half the
++        // slot; the target keeps the rest.
++        let ratio = match (want, split) {
++            (Some((w, _)), Split::Columns) => sized_ratio(frame.w, w, gap),
++            (Some((_, h)), Split::Rows) => sized_ratio(frame.h, h, gap),
++            _ => None,
++        }
++        .unwrap_or(ratio);
++
+         let node = self.node_at_mut(&path);
+         *node = Node::Split {
+             split,
+@@ -928,6 +964,40 @@ mod tests {
+         assert_eq!(frame(&t, 2), Rect::new(505, 0, 495, 600));
+     }
+ 
++    #[test]
++    fn a_new_window_keeps_its_own_width_when_it_splits() {
++        // A 300 wide window next to a full-width one takes 300 of the 1000.
++        let mut t = BspTree::new();
++        assert!(t.insert(1, None, AREA, GAP, 0.5));
++        assert!(t.insert_sized(2, Some(1), AREA, GAP, 0.5, Some((300, 600))));
++        let right = frame(&t, 2).w;
++        assert!((right - 300).abs() <= 2, "right slot was {right}");
++        assert_eq!(frame(&t, 1).w + GAP + right, AREA.w);
++    }
++
++    #[test]
++    fn a_wider_new_window_takes_at_most_half() {
++        let mut t = BspTree::new();
++        assert!(t.insert(1, None, AREA, GAP, 0.5));
++        assert!(t.insert_sized(2, Some(1), AREA, GAP, 0.5, Some((900, 600))));
++        let right = frame(&t, 2).w;
++        assert!((right - 495).abs() <= 2, "right slot was {right}");
++    }
++
++    #[test]
++    fn no_size_or_empty_size_keeps_the_configured_ratio() {
++        let mut plain = BspTree::new();
++        assert!(plain.insert(1, None, AREA, GAP, 0.5));
++        assert!(plain.insert(2, Some(1), AREA, GAP, 0.5));
++        for want in [None, Some((0, 0))] {
++            let mut t = BspTree::new();
++            assert!(t.insert(1, None, AREA, GAP, 0.5));
++            assert!(t.insert_sized(2, Some(1), AREA, GAP, 0.5, want));
++            assert_eq!(frame(&t, 1), frame(&plain, 1));
++            assert_eq!(frame(&t, 2), frame(&plain, 2));
++        }
++    }
++
+     #[test]
+     fn third_window_splits_tall_leaf_into_rows() {
+         let t = tree(&[1, 2, 3]);
+diff --git a/src/command.rs b/src/command.rs
+index 89ec877..4344c74 100644
+--- a/src/command.rs
++++ b/src/command.rs
+@@ -137,7 +137,8 @@ commands:
+ settings (put these in ~/.config/cranberry/cberryrc):
+   config <key> [value]       e.g. config animation off, config gap 10
+                              keys: gap, padding, animation (on|off),
+-                             split_ratio, resize_step, rule_carry, poll_interval
++                             split_ratio, split_by_size (on|off), resize_step,
++                             rule_carry, poll_interval
+   rule <float|tile> <app>    e.g. rule float System Settings
+   rule space <space> <app>   e.g. rule space web Safari
+   rule grid <r:c:x:y:w:h> <app>
+diff --git a/src/config.rs b/src/config.rs
+index 20a0be2..87edd4d 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -23,6 +23,8 @@ pub struct Config {
+     pub animation_duration: f64,
+     /// Share of the area the existing window keeps when a new one splits it.
+     pub split_ratio: f32,
++    /// Split a new window's slot by its own size instead of at `split_ratio`.
++    pub split_by_size: bool,
+     /// Default amount for `resize` commands, as a fraction of the split.
+     pub resize_step: f32,
+     /// Kept so older configs still load: cberry no longer polls, it waits
+@@ -110,6 +112,7 @@ impl Default for Config {
+             padding: Padding::uniform(8),
+             animation_duration: ANIMATION,
+             split_ratio: 0.5,
++            split_by_size: false,
+             resize_step: 0.05,
+             poll_interval_ms: 150,
+             float_apps: vec![
+@@ -159,6 +162,7 @@ pub const KEYS: &[&str] = &[
+     "padding",
+     "animation",
+     "split_ratio",
++    "split_by_size",
+     "resize_step",
+     "poll_interval",
+     "rule_carry",
+@@ -362,6 +366,7 @@ impl Config {
+                 }
+                 self.split_ratio = v;
+             }
++            "split_by_size" => self.split_by_size = on_off(key, one(key, args)?)?,
+             "resize_step" => {
+                 let v: f32 = number(key, one(key, args)?)?;
+                 if !(v > 0.0 && v < 1.0) {
+@@ -466,6 +471,7 @@ impl Config {
+             }
+             "animation" => on_off_name(self.animation_duration > 0.0),
+             "split_ratio" => self.split_ratio.to_string(),
++            "split_by_size" => on_off_name(self.split_by_size),
+             "resize_step" => self.resize_step.to_string(),
+             "poll_interval" | "poll_interval_ms" => self.poll_interval_ms.to_string(),
+             "drag_swap" => on_off_name(self.drag_swap),
+diff --git a/src/manager.rs b/src/manager.rs
+index 6d09286..c76f90e 100644
+--- a/src/manager.rs
++++ b/src/manager.rs
+@@ -785,14 +785,20 @@ impl<B: Backend> Manager<B> {
+     }
+ 
+     /// Tiles `id` by splitting `target` (or the last window), along the
+-    /// longer side of `target`'s slot, at the configured ratio.
++    /// longer side of `target`'s slot, at the configured ratio. With
++    /// `split_by_size` the slot is shared by the windows' sizes instead.
+     fn tile(&mut self, id: WinId, target: Option<WinId>) {
+         let (inner, gap, ratio) = (self.inner_area(), self.config.gap, self.config.split_ratio);
+         let target = target
+             .filter(|t| self.tree.contains(*t))
+             .or_else(|| self.tree.windows().last().copied());
+-        debug!("tiling window {id} next to {target:?}");
+-        self.tree.insert(id, target, inner, gap, ratio);
++        let want = if self.config.split_by_size {
++            self.backend.window_frame(id).map(|f| (f.w, f.h))
++        } else {
++            None
++        };
++        debug!("tiling window {id} next to {target:?}, size {want:?}");
++        self.tree.insert_sized(id, target, inner, gap, ratio, want);
+     }
+ 
+     /// The ids of the Spaces set to float. Space numbers count on each
+@@ -3705,6 +3711,23 @@ pub(crate) mod tests {
+         assert_eq!(m.backend().frame(2), claude, "snaps back, no swap");
+     }
+ 
++    #[test]
++    fn split_by_size_gives_a_new_window_its_own_width() {
++        let mut m = manager(0.42);
++        m.execute(&Command::parse("config split_by_size on").unwrap())
++            .unwrap();
++        m.backend.open(1, "Terminal");
++        m.refresh();
++        settle(&mut m);
++        // Opens 200 wide; the default for a mock window is 300.
++        m.backend.open(2, "Music");
++        m.backend.windows.last_mut().unwrap().frame = Rect::new(0, 0, 200, 300);
++        m.refresh();
++        settle(&mut m);
++        let wide = m.backend().frame(2).w;
++        assert!((wide - 200).abs() <= 2, "new window is {wide} wide");
++    }
++
+     #[test]
+     fn resizing_never_shows_the_highlight() {
+         let mut m = three_windows();

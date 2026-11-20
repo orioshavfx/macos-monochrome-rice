@@ -260,6 +260,7 @@ need cargo "it should have been installed by brew bundle (rust)."
 src="$WORK/cranberry"
 fetch_source "cranberry" "https://github.com/emreekici3/cranberry/archive/$CRANBERRY_REV.tar.gz" "$CRANBERRY_URL" "$CRANBERRY_REV" "$src" || exit 1
 run "applying patches/cranberry-latin-layout.patch" git -C "$src" apply "$REPO_DIR/patches/cranberry-latin-layout.patch"
+run "applying patches/cranberry-split-by-size.patch" git -C "$src" apply "$REPO_DIR/patches/cranberry-split-by-size.patch"
 run_long "cargo build of cberry" cargo build --release --manifest-path "$src/Cargo.toml" || exit 1
 install_binary "$src/target/release/cberry" cberry
 run "codesign cberry" codesign --force --sign - "$BIN_DIR/cberry"
