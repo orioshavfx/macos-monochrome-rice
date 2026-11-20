@@ -48,6 +48,8 @@ GIT_NET=(-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60)
 AMT_REV="eb796cc"
 SYSVIZ_URL="https://github.com/orioshavfx/sysviz.git"
 SYSVIZ_TAG="v0.2.0"
+WALLPICKER_URL="https://github.com/orioshavfx/Wallpicker.git"
+WALLPICKER_REV="5b54e5ea0b4726e6420e64f1d38cebbb61dcda93"
 FISHER_URL="https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish"
 BREW_INSTALL_URL="https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 
@@ -483,25 +485,24 @@ fi
 # ---------------------------------------------------------------------------
 step "Building wallpicker"
 # Not fatal: without it only opt+w does nothing, the rest of the rice works.
-# Without a key (hashing failed) it is always built and no stamp is written.
-wp_key="$(source_key wallpicker)" || { warn "hashing the wallpicker sources failed; building it anyway"; wp_key=""; }
-if [ -n "$wp_key" ] && stamp_current wallpicker "$wp_key" "$BIN_DIR/wallpicker"; then
+# The source is its own repository (orioshavfx/Wallpicker), pinned to WALLPICKER_REV like cberry.
+wp_key="rev=$WALLPICKER_REV"
+if stamp_current wallpicker "$wp_key" "$BIN_DIR/wallpicker"; then
     info "unchanged, skipped: wallpicker"
 else
     clear_stamp wallpicker
     src="$WORK/wallpicker"
-    run "copying wallpicker sources" cp -R "$REPO_DIR/wallpicker" "$src"
-    if run_long "swift build of wallpicker" swift build -c release --package-path "$src"; then
+    if fetch_source "wallpicker" "https://github.com/orioshavfx/Wallpicker/archive/$WALLPICKER_REV.tar.gz" \
+            "$WALLPICKER_URL" "$WALLPICKER_REV" "$src" \
+        && run_long "swift build of wallpicker" swift build -c release --package-path "$src"; then
         if wp_bin="$(cd "$src" && swift build -c release --show-bin-path)/wallpicker" \
             && install_binary "$wp_bin" wallpicker; then
-            if [ -n "$wp_key" ]; then
-                write_stamp wallpicker "$wp_key"
-            fi
+            write_stamp wallpicker "$wp_key"
         else
             warn "wallpicker was built but could not be installed; opt+w will do nothing."
         fi
     else
-        warn "wallpicker did not build; opt+w will do nothing. Re-run the installer after fixing it."
+        warn "wallpicker did not build or could not be fetched; opt+w will do nothing. Re-run the installer after fixing it."
     fi
 fi
 

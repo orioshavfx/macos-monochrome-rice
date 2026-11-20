@@ -52,7 +52,7 @@ The script is safe to run again. It may ask for your password (Homebrew installe
 | `sysviz`, built from sysviz `v0.2.0` | `~/bin/sysviz` |
 | Rice Settings app (sources in `rice-settings/`) | `~/Applications/rice-settings.app`, sources in `~/bin/rice-settings` |
 | `configs/kitty`, `fish`, `cranberry`, `fastfetch`, `sysviz`, `rice-settings` | `~/.config/<name>/` |
-| `wallpicker/` (Swift app for opt+w, built like Rice Settings; skipped with a warning if it does not build) | `~/bin/wallpicker` |
+| [wallpicker](https://github.com/orioshavfx/Wallpicker) (Swift app for opt+w, fetched at a pinned commit and built like cberry; skipped with a warning if it does not build) | `~/bin/wallpicker` |
 | cberry login service (`cberry install`, `cberry start`) | `~/Library/LaunchAgents` |
 | `eval "$(brew shellenv)"`, only if missing, so kitty finds fish | `~/.zprofile` |
 
@@ -69,7 +69,7 @@ On first use macOS also asks to let your terminal capture system audio (sysviz) 
 
 ## Wallpaper picker
 
-Opt+W opens **wallpicker**, a separate full-screen carousel. It starts on the wallpaper that is set now, shows the previous and next pictures on either side, and labels each one with its filename.
+Opt+W opens **wallpicker**, a separate full-screen carousel. It starts on the wallpaper that is set now, shows the previous and next pictures on either side, and labels each one with its filename. The source lives in its own repository, [orioshavfx/Wallpicker](https://github.com/orioshavfx/Wallpicker), and can be built on its own too.
 
 - Pictures come from `~/Pictures/Wallpapers` by default. The folder and the carousel accent colour are set on the Wallpaper page of Rice Settings (saved to `~/.config/wallpicker/config.toml`).
 - Left and Right move through the carousel. Return sets the picture on every display and every Space. Escape closes without changing anything.
