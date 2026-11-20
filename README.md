@@ -8,12 +8,15 @@ A monochrome macOS terminal setup: black, white and greys only.
 
 ![Apple Music in the terminal, cmatrix, sysviz and tty-clock](docs/img/music-and-cmatrix.png)
 
+![wallpicker: a carousel of wallpapers in greys, with the current one centred](docs/img/wallpicker.png)
+
 - **kitty**: terminal, Hasklug Nerd Font, translucent background, grey theme
 - **fish**: shell with fastfetch on start and short aliases (`ls` = lsd, `cat` = bat, `grep` = rg, ...)
 - **cberry** ([cranberry](https://github.com/emreekici3/cranberry)): tiling window manager, with a small patch so binds work while a non-Latin layout (e.g. Russian) is selected
 - **sysviz**: audio visualizer for the terminal
 - **fastfetch**: grey system info
 - **rice-settings**: a small native app to change all of the above (Opt+U or `setup`)
+- **wallpicker**: a full-screen wallpaper carousel (Opt+W), see [Wallpaper picker](#wallpaper-picker)
 - **AppleMusicTUI** (`musicplayer`): Apple Music in the terminal, recoloured white, with a lyrics view (`l`); start it with `am`
 
 macOS only. sysviz needs macOS 14.2 or newer.
@@ -64,7 +67,14 @@ Existing files that differ are saved first as `<file>.bak-<timestamp>`. Nothing 
 
 On first use macOS also asks to let your terminal capture system audio (sysviz) and control Music (musicplayer). The lyrics view sends the track title and artist to [lrclib.net](https://lrclib.net).
 
-Wallpapers: put images in `~/Pictures/Wallpapers` (created on first use). Return writes the picture into macOS's wallpaper store for every display and Space. Before each change the store is copied to `~/.local/state/monochrome-macos-rice/wallpaper-backup`, and WallpaperAgent is restarted. If macOS refuses the write, allow `wallpicker` under Privacy & Security > Full Disk Access.
+## Wallpaper picker
+
+Opt+W opens **wallpicker**, a separate full-screen carousel. It starts on the wallpaper that is set now, shows the previous and next pictures on either side, and labels each one with its filename.
+
+- Pictures come from `~/Pictures/Wallpapers` (created on first use).
+- Left and Right move through the carousel. Return sets the picture on every display and every Space. Escape closes without changing anything.
+- Return writes the picture into macOS's wallpaper store (`~/Library/Application Support/com.apple.wallpaper/Store/Index.plist`) and restarts WallpaperAgent. Before each change the store is copied to `~/.local/state/monochrome-macos-rice/wallpaper-backup`, so the original can be copied back by hand.
+- If macOS refuses the write, allow `wallpicker` under Privacy & Security > Full Disk Access.
 
 ## Rice Settings
 
