@@ -50,54 +50,43 @@ final class Hairline: NSView {
 
 // MARK: - Sidebar
 
-/// One sidebar entry (76 pt wide): an SF Symbol in a 56 x 36 rounded rectangle and an 11 pt caption under it.
-/// The selected entry gets a light fill behind the symbol.
-final class SidebarItem: NSView {
+/// One row of the sidebar: an SF Symbol and the section name side by side, 30 pt high.
+/// The selected row gets a light fill behind it.
+final class SidebarItem: FillView {
     var onClick: (() -> Void)?
     var isSelected = false { didSet { restyle() } }
 
-    private let iconBox = FillView()
     private let imageView = NSImageView()
     private let label: NSTextField
 
     init(title: String, symbol: String) {
-        label = NSTextField(wrappingLabelWithString: title)
+        label = NSTextField(labelWithString: title)
         super.init(frame: .zero)
 
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
             ?? NSImage(systemSymbolName: "gearshape", accessibilityDescription: title)
-        let config = NSImage.SymbolConfiguration(pointSize: 22, weight: .regular)
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
         imageView.image = image?.withSymbolConfiguration(config) ?? image
         imageView.imageScaling = .scaleProportionallyDown
 
-        iconBox.cornerRadius = 10
-        label.font = .systemFont(ofSize: 11)
-        label.alignment = .center
-        label.isSelectable = false
-        label.maximumNumberOfLines = 2
-        label.preferredMaxLayoutWidth = 72
+        cornerRadius = 8
+        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.lineBreakMode = .byTruncatingTail
+        label.toolTip = title
 
-        for view in [iconBox, imageView, label] as [NSView] {
+        for view in [imageView, label] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
         }
-        addSubview(iconBox)
-        iconBox.addSubview(imageView)
-        addSubview(label)
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 76),
-            iconBox.topAnchor.constraint(equalTo: topAnchor),
-            iconBox.centerXAnchor.constraint(equalTo: centerXAnchor),
-            iconBox.widthAnchor.constraint(equalToConstant: 56),
-            iconBox.heightAnchor.constraint(equalToConstant: 36),
-            imageView.centerXAnchor.constraint(equalTo: iconBox.centerXAnchor),
-            imageView.centerYAnchor.constraint(equalTo: iconBox.centerYAnchor),
-            imageView.widthAnchor.constraint(lessThanOrEqualToConstant: 48),
-            imageView.heightAnchor.constraint(lessThanOrEqualToConstant: 32),
-            label.topAnchor.constraint(equalTo: iconBox.bottomAnchor, constant: 4),
-            label.centerXAnchor.constraint(equalTo: centerXAnchor),
-            label.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor),
+            heightAnchor.constraint(equalToConstant: 30),
+            imageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            imageView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            imageView.widthAnchor.constraint(equalToConstant: 18),
+            imageView.heightAnchor.constraint(equalToConstant: 18),
+            label.leadingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: 9),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
@@ -108,7 +97,7 @@ final class SidebarItem: NSView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     private func restyle() {
-        iconBox.fillColor = isSelected ? Theme.selectedFill : .clear
+        fillColor = isSelected ? Theme.selectedFill : .clear
         imageView.contentTintColor = isSelected ? .labelColor : .secondaryLabelColor
         label.textColor = isSelected ? .labelColor : .secondaryLabelColor
     }

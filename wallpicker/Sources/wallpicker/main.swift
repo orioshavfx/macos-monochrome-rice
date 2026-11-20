@@ -2,7 +2,8 @@ import AppKit
 import ImageIO
 import QuartzCore
 
-// wallpicker: a full-screen carousel of the pictures in ~/Pictures/Wallpapers.
+// wallpicker: a full-screen carousel of the pictures in the folder set in Rice Settings
+// (default ~/Pictures/Wallpapers), in the accent colour set there too (~/.config/wallpicker/config.toml).
 // Left and Right move through them. Return writes the picture into the macOS
 // wallpaper store for every display and every Space, then restarts
 // WallpaperAgent. Escape closes without changing anything.
@@ -11,7 +12,41 @@ import QuartzCore
 let greyscale = true
 
 let homeFolder = FileManager.default.homeDirectoryForCurrentUser
-let picturesFolder = homeFolder.appendingPathComponent("Pictures/Wallpapers", isDirectory: true)
+/// Settings written by Rice Settings (Wallpaper page): `key = "value"` lines, the last one wins.
+let settingsFile = homeFolder.appendingPathComponent(".config/wallpicker/config.toml")
+
+func setting(_ key: String) -> String? {
+    guard let text = try? String(contentsOf: settingsFile, encoding: .utf8) else { return nil }
+    var found: String?
+    for line in text.components(separatedBy: "\n") {
+        guard let eq = line.firstIndex(of: "=") else { continue }
+        guard line[..<eq].trimmingCharacters(in: .whitespaces) == key else { continue }
+        let value = line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces)
+        if value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") {
+            found = String(value.dropFirst().dropLast())
+        }
+    }
+    return found
+}
+
+/// "#rrggbb" to a colour; nil when the text is not that form.
+func colorFromHex(_ text: String) -> NSColor? {
+    var hex = text
+    if hex.hasPrefix("#") { hex.removeFirst() }
+    guard hex.count == 6, let v = UInt32(hex, radix: 16) else { return nil }
+    return NSColor(red: CGFloat((v >> 16) & 0xFF) / 255,
+                   green: CGFloat((v >> 8) & 0xFF) / 255,
+                   blue: CGFloat(v & 0xFF) / 255,
+                   alpha: 1)
+}
+
+/// The folder the pictures are read from; ~ is expanded. Default ~/Pictures/Wallpapers.
+let picturesFolder = URL(
+    fileURLWithPath: NSString(string: setting("folder") ?? "~/Pictures/Wallpapers").expandingTildeInPath,
+    isDirectory: true)
+
+/// Colour of the selected picture's border and name, and of the caption. Default white.
+let accent: NSColor = setting("accent").flatMap(colorFromHex) ?? .white
 let wallpaperStore = homeFolder.appendingPathComponent(
     "Library/Application Support/com.apple.wallpaper/Store/Index.plist")
 let backupFolder = homeFolder.appendingPathComponent(".local/state/monochrome-macos-rice/wallpaper-backup", isDirectory: true)
@@ -19,7 +54,10 @@ let imageProvider = "com.apple.wallpaper.choice.image"
 let pictureTypes: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff", "webp", "bmp"]
 
 func wallpaperFiles() -> [URL] {
-    try? FileManager.default.createDirectory(at: picturesFolder, withIntermediateDirectories: true)
+    // Only the default folder is created; a folder the user chose must already exist.
+    if setting("folder") == nil {
+        try? FileManager.default.createDirectory(at: picturesFolder, withIntermediateDirectories: true)
+    }
     let items = (try? FileManager.default.contentsOfDirectory(at: picturesFolder, includingPropertiesForKeys: nil)) ?? []
     return items
         .filter { pictureTypes.contains($0.pathExtension.lowercased()) }
@@ -201,7 +239,7 @@ final class CarouselView: NSView {
             let card = CALayer()
             card.contentsGravity = .resizeAspectFill
             card.masksToBounds = true
-            card.borderColor = NSColor.white.cgColor
+            card.borderColor = accent.cgColor
             card.contents = preview
             layer?.addSublayer(card)
             cards.append(card)
@@ -220,13 +258,13 @@ final class CarouselView: NSView {
 
         caption.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
         caption.fontSize = 14
-        caption.foregroundColor = NSColor.white.cgColor
+        caption.foregroundColor = accent.cgColor
         caption.alignmentMode = .center
         caption.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
         layer?.addSublayer(caption)
 
         if files.isEmpty {
-            caption.string = "No pictures in ~/Pictures/Wallpapers. Press Escape."
+            caption.string = "No pictures in \(picturesFolder.path). Choose a folder in Rice Settings > Wallpaper. Escape closes."
         } else {
             showBackdrop()
         }
@@ -310,6 +348,7 @@ final class CarouselView: NSView {
             label.bounds = CGRect(x: 0, y: 0, width: cardWidth, height: 18)
             label.position = CGPoint(x: card.position.x, y: card.position.y - cardHeight * scale / 2 - 22)
             label.opacity = opacity
+            label.foregroundColor = (offset == 0 ? accent : NSColor.white).cgColor
             label.zPosition = 100 - distance
         }
 

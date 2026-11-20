@@ -786,14 +786,65 @@ enum AppConf {
     }
 }
 
+/// ~/.config/wallpicker/config.toml, read by wallpicker (opt+w) and written by the Wallpaper page:
+/// `folder = "~/Pictures/Wallpapers"` and `accent = "#rrggbb"`. Each key is one line; the last one wins.
+enum WallpickerConf {
+    static let file = ConfigFile(".config/wallpicker/config.toml")
+    static let defaultFolder = "~/Pictures/Wallpapers"
+    static let defaultAccent = "#ffffff"
+
+    private static func keyIndex(_ key: String, in lines: [String]) -> Int? {
+        lines.lastIndex { line in
+            guard let eq = line.firstIndex(of: "=") else { return false }
+            return line[..<eq].trimmingCharacters(in: .whitespaces) == key
+        }
+    }
+
+    /// The quoted value of `key`, or nil when the file, the key or the quotes are missing.
+    static func read(_ key: String) -> String? {
+        guard let lines = try? file.readLines(), let i = keyIndex(key, in: lines),
+              let eq = lines[i].firstIndex(of: "=") else { return nil }
+        let value = lines[i][lines[i].index(after: eq)...].trimmingCharacters(in: .whitespaces)
+        guard value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") else { return nil }
+        return String(value.dropFirst().dropLast())
+    }
+
+    /// Sets `key = "value"`: replaces the last line with that key or appends one. Creates the file and
+    /// its folder when missing. Returns false when nothing changed.
+    @discardableResult
+    static func write(_ key: String, _ value: String) throws -> Bool {
+        guard !value.contains("\""), !value.contains("\n"), !value.isEmpty else {
+            throw ConfigFileError.rejected("The value must not be empty or contain quotes.")
+        }
+        var lines: [String] = []
+        if FileManager.default.fileExists(atPath: file.url.path) {
+            lines = try file.readLines()
+        }
+        let newLine = "\(key) = \"\(value)\""
+        if let i = keyIndex(key, in: lines) {
+            if lines[i] == newLine { return false }
+            lines[i] = newLine
+        } else if lines.isEmpty || lines == [""] {
+            lines = [newLine, ""]
+        } else if let last = lines.last, last.isEmpty {
+            lines.insert(newLine, at: lines.count - 1)
+        } else {
+            lines.append(newLine)
+            lines.append("")
+        }
+        try file.writeLinesWithoutBackup(lines)
+        return true
+    }
+}
+
 // MARK: - cberry: the rule for this app's window, and cberry reload
 
 extension CberryRc {
     /// cberry matches a rule against the window owner name (kCGWindowOwnerName), which for this
     /// SwiftPM executable is its process name.
     static let windowRuleApp = "rice-settings"
-    /// 90% of the screen's width and 80% of its height, centred: columns 1-18 of 20, rows 2-17 of 20.
-    static let windowRuleGrid = "20:20:1:2:18:16"
+    /// 60% of the screen's width and 70% of its height, centred: columns 4-15 of 20, rows 3-16 of 20.
+    static let windowRuleGrid = "20:20:4:3:12:14"
     /// Written in the quoting style of the existing `cberry rule float "wallpicker"` line.
     static let windowRuleLine = "cberry rule grid \(windowRuleGrid) \"\(windowRuleApp)\""
 

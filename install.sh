@@ -292,13 +292,16 @@ step "Building rice-settings.app"
 need swift "it comes with the Xcode Command Line Tools."
 src="$WORK/rice-settings"
 run "copying rice-settings sources" cp -R "$REPO_DIR/rice-settings" "$src"
+# Shown on the Overview page of rice-settings: the commit of this checkout and the build time.
+build_commit="$(git -C "$REPO_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+build_date="$(date '+%Y-%m-%d %H:%M')"
 run_long "swift build of rice-settings" swift build -c release --package-path "$src" || exit 1
 rs_bin="$(cd "$src" && swift build -c release --show-bin-path)/rice-settings" || die "swift build --show-bin-path failed"
 APP="$APP_DIR/rice-settings.app"
 NEW_APP="$WORK/rice-settings.app"
 run "creating the app bundle" mkdir -p "$NEW_APP/Contents/MacOS"
 run "copying the rice-settings binary" cp "$rs_bin" "$NEW_APP/Contents/MacOS/rice-settings"
-cat >"$NEW_APP/Contents/Info.plist" <<'PLIST' || die "writing Info.plist failed"
+cat >"$NEW_APP/Contents/Info.plist" <<PLIST || die "writing Info.plist failed"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -312,6 +315,8 @@ cat >"$NEW_APP/Contents/Info.plist" <<'PLIST' || die "writing Info.plist failed"
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>RiceBuildCommit</key><string>$build_commit</string>
+  <key>RiceBuildDate</key><string>$build_date</string>
 </dict>
 </plist>
 PLIST
@@ -369,6 +374,8 @@ while IFS= read -r -d '' file; do
     rel="${file#"$REPO_DIR/rice-settings/"}"
     install_file "$file" "$HOME/bin/rice-settings/$rel"
 done < <(find "$REPO_DIR/rice-settings" -type f ! -name '.DS_Store' ! -path '*/.build/*' ! -path '*/.swiftpm/*' -print0)
+# `setup --build` reads this file, so a rebuild keeps the commit this install was made from.
+run "recording the build commit" sh -c 'printf "%s\n" "$1" >"$2"' sh "$build_commit" "$HOME/bin/rice-settings/BUILD_COMMIT"
 
 # ---------------------------------------------------------------------------
 step "cberry service"

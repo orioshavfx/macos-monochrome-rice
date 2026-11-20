@@ -71,12 +71,14 @@ On first use macOS also asks to let your terminal capture system audio (sysviz) 
 
 Opt+W opens **wallpicker**, a separate full-screen carousel. It starts on the wallpaper that is set now, shows the previous and next pictures on either side, and labels each one with its filename.
 
-- Pictures come from `~/Pictures/Wallpapers` (created on first use).
+- Pictures come from `~/Pictures/Wallpapers` by default. The folder and the carousel accent colour are set on the Wallpaper page of Rice Settings (saved to `~/.config/wallpicker/config.toml`).
 - Left and Right move through the carousel. Return sets the picture on every display and every Space. Escape closes without changing anything.
 - Return writes the picture into macOS's wallpaper store (`~/Library/Application Support/com.apple.wallpaper/Store/Index.plist`) and restarts WallpaperAgent. Before each change the store is copied to `~/.local/state/monochrome-macos-rice/wallpaper-backup`, so the original can be copied back by hand.
 - If macOS refuses the write, allow `wallpicker` under Privacy & Security > Full Disk Access.
 
 ## Rice Settings
+
+The app opens on Overview: the build (version, commit, build time, macOS) and which parts are installed in `~/bin`. Terminal, WM, Wallpaper, sysviz, fastfetch and App are the other pages; the window is 60% of the screen wide and 70% high.
 
 ```sh
 setup           # opens ~/Applications/rice-settings.app, builds it first if missing

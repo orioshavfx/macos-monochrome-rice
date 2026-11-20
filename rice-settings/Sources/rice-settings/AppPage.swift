@@ -45,7 +45,7 @@ final class AppPage: NSView {
                     sections: [
                         PageKit.section("Appearance", "Saved to ~/.config/rice-settings/config.toml.", [appearanceCard]),
                         PageKit.section("Window",
-                                        "The window always opens centred, 90% of the screen wide and 80% high; if cberry is not "
+                                        "The window always opens centred, 60% of the screen wide and 70% high; if cberry is not "
                                             + "running or the rule is off, cberry does not float it.",
                                         [windowCard]),
                     ]),

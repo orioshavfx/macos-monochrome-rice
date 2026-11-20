@@ -101,7 +101,7 @@ cberry bind 'alt - 0 : cberry balance'
 cberry bind 'alt - m : cberry zoom'
 # Выбор обоев (opt+w): отдельное полноэкранное окно, см. wallpicker/.
 cberry rule float "wallpicker"
-cberry rule grid 20:20:1:2:18:16 "rice-settings"
+cberry rule grid 20:20:4:3:12:14 "rice-settings"
 cberry bind 'alt - w : ~/bin/wallpicker'
 cberry bind 'alt - u : open ~/Applications/rice-settings.app'
 
