@@ -44,21 +44,35 @@ enum Motion {
     /// Runs `changes` in an animation group (`duration`, ease in/out, implicit animation allowed).
     /// With reduce motion on, the changes are applied at once: a zero-length group, so `animator()`
     /// calls inside `changes` do not fall back to the default 0.25 s.
-    static func animate(_ duration: TimeInterval = 0.25, _ changes: @escaping () -> Void) {
+    /// `completion`, if given, runs when the group's animations have finished (at once with reduce motion).
+    static func animate(_ duration: TimeInterval = 0.25, _ changes: @escaping () -> Void,
+                        completion: (() -> Void)? = nil) {
         guard enabled else {
             NSAnimationContext.beginGrouping()
             NSAnimationContext.current.duration = 0
             NSAnimationContext.current.allowsImplicitAnimation = false
+            NSAnimationContext.current.completionHandler = completion
             changes()
             NSAnimationContext.endGrouping()
             return
         }
-        NSAnimationContext.runAnimationGroup { context in
+        NSAnimationContext.runAnimationGroup({ context in
             context.duration = duration
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             context.allowsImplicitAnimation = true
             changes()
-        }
+        }, completionHandler: completion)
+    }
+
+    /// Applies `changes` at once, in a zero-length group. `animator()` calls inside it replace an
+    /// animation of the same property that is still running, so a view can be put in its final state
+    /// in the middle of an earlier `animate`.
+    static func now(_ changes: () -> Void) {
+        NSAnimationContext.beginGrouping()
+        NSAnimationContext.current.duration = 0
+        NSAnimationContext.current.allowsImplicitAnimation = false
+        changes()
+        NSAnimationContext.endGrouping()
     }
 }
 
@@ -268,33 +282,25 @@ final class SidebarItem: FillView {
 
 // MARK: - Tab bar
 
-/// One text tab: the title and, when active, a 2 pt accent line under it.
+/// One text tab: the title, with 9 pt under it for the active tab line (drawn by the TabBar).
 final class TabItem: NSView {
     var onClick: (() -> Void)?
     var isActive = false { didSet { restyle() } }
 
     private let label: NSTextField
-    private let underline = FillView()
 
     init(title: String) {
         label = NSTextField(labelWithString: title)
         super.init(frame: .zero)
         label.font = .systemFont(ofSize: 13, weight: .medium)
-        underline.fillColor = Theme.accent
-        underline.cornerRadius = 1
         label.translatesAutoresizingMaskIntoConstraints = false
-        underline.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
-        addSubview(underline)
         NSLayoutConstraint.activate([
             label.topAnchor.constraint(equalTo: topAnchor, constant: 6),
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
-            underline.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 7),
-            underline.leadingAnchor.constraint(equalTo: leadingAnchor),
-            underline.trailingAnchor.constraint(equalTo: trailingAnchor),
-            underline.heightAnchor.constraint(equalToConstant: 2),
-            underline.bottomAnchor.constraint(equalTo: bottomAnchor),
+            // 7 pt gap + the 2 pt line, as when each tab drew its own line.
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -9),
         ])
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
@@ -304,9 +310,9 @@ final class TabItem: NSView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    /// The text colour switches at once (NSTextField's textColor does not animate); the line slides.
     private func restyle() {
         label.textColor = isActive ? .labelColor : .secondaryLabelColor
-        underline.isHidden = !isActive
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -325,6 +331,11 @@ final class TabItem: NSView {
 final class TabBar: NSView {
     var onSelect: ((Int) -> Void)?
     private var items: [TabItem] = []
+    /// The 2 pt accent line under the active tab. It is pinned to that tab's edges and slides to the
+    /// new one when the selection changes (as the CapsuleSegments pill does).
+    private let indicator = OverlayView()
+    private var indicatorConstraints: [NSLayoutConstraint] = []
+    private var selected: Int?
 
     init(titles: [String]) {
         super.init(frame: .zero)
@@ -345,7 +356,14 @@ final class TabBar: NSView {
         stack.setViews(items, in: .leading)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
+        indicator.fillColor = Theme.accent
+        indicator.cornerRadius = 1
+        indicator.isHidden = true
+        indicator.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(indicator)  // over the hairline and the tabs
         NSLayoutConstraint.activate([
+            indicator.heightAnchor.constraint(equalToConstant: 2),
+            indicator.bottomAnchor.constraint(equalTo: bottomAnchor),
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
@@ -359,8 +377,33 @@ final class TabBar: NSView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    /// Marks tab `index` active. The line slides to it when the bar is on screen and had a selection
+    /// before; the first selection (from init, or while off screen) puts it in place without animation.
     func setSelected(_ index: Int) {
         for (i, item) in items.enumerated() { item.isActive = i == index }
+        guard items.indices.contains(index) else {
+            indicator.isHidden = true
+            selected = nil
+            return
+        }
+        let animated = selected != nil && selected != index && window != nil
+        selected = index
+        indicator.isHidden = false
+        pinIndicator(to: items[index])
+        guard animated else { return }
+        // The new constraints are laid out inside the animation group, so the line's frame moves there.
+        needsLayout = true
+        Motion.animate(0.25) { [weak self] in self?.layoutSubtreeIfNeeded() }
+    }
+
+    /// Pins the line to the leading and trailing edges of `item` (replacing its previous constraints).
+    private func pinIndicator(to item: TabItem) {
+        NSLayoutConstraint.deactivate(indicatorConstraints)
+        indicatorConstraints = [
+            indicator.leadingAnchor.constraint(equalTo: item.leadingAnchor),
+            indicator.trailingAnchor.constraint(equalTo: item.trailingAnchor),
+        ]
+        NSLayoutConstraint.activate(indicatorConstraints)
     }
 }
 
@@ -981,6 +1024,13 @@ final class TabbedPageView: NSView {
     private let tabs: [PageTab]
     private let subtitleLabel = NSTextField(wrappingLabelWithString: "")
     private var scrolls: [NSScrollView] = []
+    /// Per scroll view, its leading and trailing constraints to the content area: the incoming tab
+    /// slides in by shifting both constants (Auto Layout stays in charge of its frame).
+    private var scrollOffsets: [[NSLayoutConstraint]] = []
+    /// The view the scroll views are pinned to.
+    private let area = NSView()
+    /// Counts tab switches, so the completion of an older switch does not hide a view a newer one shows.
+    private var switchGeneration = 0
     private var tabBar: TabBar?
 
     /// `showsTabBar: false` hides the tab bar; the page then switches tabs itself with selectTab(_:).
@@ -990,15 +1040,62 @@ final class TabbedPageView: NSView {
         self.tabs = tabs
         super.init(frame: .zero)
         build(title, kicker, accessory, status, showsTabBar)
-        selectTab(0)
+        selectTab(0, animated: false)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    func selectTab(_ index: Int) {
+    /// Shows tab `index`. On screen, the old tab fades out while the new one fades in and slides 12 pt
+    /// into place from the side of the change (from the right for a later tab, from the left for an
+    /// earlier one), and the new tab scrolls back to its top. `animated: false` switches at once.
+    func selectTab(_ index: Int, animated: Bool = true) {
         guard tabs.indices.contains(index) else { return }
+        let previous = selectedIndex
         selectedIndex = index
-        for (i, scroll) in scrolls.enumerated() { scroll.isHidden = i != index }
+        switchGeneration += 1
+        let generation = switchGeneration
+
+        // Final state of any earlier switch first, so a fast second click never leaves a tab hidden or
+        // half faded: everything opaque and in place, only the old and the new tab not hidden.
+        // The fade of a running switch is a layer animation: remove it, then set the values through a
+        // zero-length group, which also replaces a running animation of the offset constants.
+        for (i, scroll) in scrolls.enumerated() {
+            scroll.layer?.removeAllAnimations()
+            let offsets = scrollOffsets[i]
+            Motion.now {
+                scroll.animator().alphaValue = 1
+                offsets.forEach { $0.animator().constant = 0 }
+            }
+            scroll.isHidden = i != index && i != previous
+        }
+
+        if index != previous && scrolls.indices.contains(index) {
+            PageKit.smoothScroll(scrolls[index], to: 0)
+        }
+
+        if animated && window != nil && index != previous && scrolls.indices.contains(previous)
+            && scrolls.indices.contains(index) {
+            let outgoing = scrolls[previous]
+            let incoming = scrolls[index]
+            let offsets = scrollOffsets[index]
+            let shift: CGFloat = index > previous ? 12 : -12
+            incoming.alphaValue = 0
+            offsets.forEach { $0.constant = shift }
+            area.layoutSubtreeIfNeeded()
+            Motion.animate(0.25, {
+                outgoing.animator().alphaValue = 0
+                incoming.animator().alphaValue = 1
+                offsets.forEach { $0.animator().constant = 0 }
+            }, completion: { [weak self] in
+                // A newer switch has already set its own state; leave it alone.
+                guard let self = self, self.switchGeneration == generation else { return }
+                outgoing.isHidden = true
+                outgoing.alphaValue = 1
+            })
+        } else if scrolls.indices.contains(previous) && previous != index {
+            scrolls[previous].isHidden = true  // instant switch: the old tab goes at once
+        }
+
         subtitleLabel.stringValue = tabs[index].subtitle
         tabBar?.setSelected(index)
         onSelect?(index)
@@ -1070,8 +1167,10 @@ final class TabbedPageView: NSView {
         status.translatesAutoresizingMaskIntoConstraints = false
         addSubview(status)
 
-        let area = NSView()
         area.translatesAutoresizingMaskIntoConstraints = false
+        // The incoming tab starts 12 pt to one side: keep it inside the content area (over the sidebar
+        // otherwise). Before macOS 14 views clip their subviews already.
+        if #available(macOS 14.0, *) { area.clipsToBounds = true }
         addSubview(area)
         constraints += [
             area.topAnchor.constraint(equalTo: last.bottomAnchor, constant: 8),
@@ -1086,14 +1185,18 @@ final class TabbedPageView: NSView {
 
         for tab in tabs {
             let scroll = PageKit.scrollingStack(tab.sections, margin: margin)
+            scroll.wantsLayer = true  // its alpha is animated on a tab switch
             area.addSubview(scroll)
-            constraints += [
-                scroll.topAnchor.constraint(equalTo: area.topAnchor),
+            let offsets = [
                 scroll.leadingAnchor.constraint(equalTo: area.leadingAnchor),
                 scroll.trailingAnchor.constraint(equalTo: area.trailingAnchor),
+            ]
+            constraints += offsets + [
+                scroll.topAnchor.constraint(equalTo: area.topAnchor),
                 scroll.bottomAnchor.constraint(equalTo: area.bottomAnchor),
             ]
             scrolls.append(scroll)
+            scrollOffsets.append(offsets)
         }
         NSLayoutConstraint.activate(constraints)
     }
@@ -1140,6 +1243,28 @@ enum PageKit {
         }
         NSLayoutConstraint.activate(constraints)
         return scroll
+    }
+
+    /// Scrolls `scroll` so the document's point `y` is at the top, clamped to 0...(the last position),
+    /// with an ease-out animation of `duration`. Off screen, or already there, it moves at once / not at all.
+    static func smoothScroll(_ scroll: NSScrollView, to y: CGFloat, duration: TimeInterval = 0.35) {
+        let clip = scroll.contentView
+        let documentHeight = scroll.documentView?.frame.height ?? 0
+        let maxY = max(0, documentHeight - clip.bounds.height)
+        let target = NSPoint(x: clip.bounds.origin.x, y: min(max(y, 0), maxY))
+        guard clip.bounds.origin != target else { return }
+        guard scroll.window != nil else {
+            clip.setBoundsOrigin(target)
+            scroll.reflectScrolledClipView(clip)
+            return
+        }
+        Motion.animate(duration, {
+            NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            clip.animator().setBoundsOrigin(target)
+            scroll.reflectScrolledClipView(clip)
+        }, completion: {
+            scroll.reflectScrolledClipView(clip)  // scroller in its final place
+        })
     }
 
     /// Pins `child` to all four edges of `page`.
