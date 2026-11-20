@@ -26,6 +26,56 @@ func wallpaperFiles() -> [URL] {
         .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
 }
 
+/// The path of the first image choice in a store subtree, if any.
+func imagePath(in node: Any) -> String? {
+    if let dict = node as? [String: Any] {
+        if let choices = dict["Choices"] as? [[String: Any]] {
+            for choice in choices {
+                if let path = configuredPath(choice) { return path }
+            }
+        }
+        for (key, value) in dict where key != "Choices" {
+            if let path = imagePath(in: value) { return path }
+        }
+    } else if let array = node as? [Any] {
+        for value in array {
+            if let path = imagePath(in: value) { return path }
+        }
+    }
+    return nil
+}
+
+func configuredPath(_ choice: [String: Any]) -> String? {
+    guard (choice["Provider"] as? String) == imageProvider,
+          let blob = choice["Configuration"] as? Data,
+          let configuration = (try? PropertyListSerialization.propertyList(from: blob, options: [], format: nil)) as? [String: Any],
+          let image = configuration["url"] as? [String: Any],
+          let relative = image["relative"] as? String,
+          let url = URL(string: relative)
+    else { return nil }
+    return url.path
+}
+
+/// The picture the desktop uses now: the main display first, then the default.
+func currentPicturePath() -> String? {
+    guard let data = try? Data(contentsOf: wallpaperStore),
+          let root = (try? PropertyListSerialization.propertyList(from: data, options: [], format: nil)) as? [String: Any]
+    else { return nil }
+    for key in ["Displays", "SystemDefault", "Spaces"] {
+        if let node = root[key], let path = imagePath(in: node) { return path }
+    }
+    return nil
+}
+
+/// Where the carousel starts: on the current picture if it is in the folder, else the first.
+func startIndex(in files: [URL]) -> Int {
+    guard let current = currentPicturePath() else { return 0 }
+    let name = URL(fileURLWithPath: current).lastPathComponent
+    return files.firstIndex { $0.path == current }
+        ?? files.firstIndex { $0.lastPathComponent == name }
+        ?? 0
+}
+
 /// A downscaled copy of the picture, in greys when `greyscale` is set.
 func loadPicture(_ url: URL, maxSize: Int) -> CGImage? {
     guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
@@ -134,6 +184,7 @@ final class CarouselView: NSView {
 
     init(frame: NSRect, files: [URL]) {
         self.files = files
+        self.index = startIndex(in: files)
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
@@ -167,6 +218,7 @@ final class CarouselView: NSView {
         } else {
             showBackdrop()
         }
+        layoutCards(animated: false)
     }
 
     required init?(coder: NSCoder) {
@@ -265,6 +317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 files: wallpaperFiles())
         win.contentView = view
         win.makeKeyAndOrderFront(nil)
+        win.orderFrontRegardless()
         win.makeFirstResponder(view)
         NSApp.activate(ignoringOtherApps: true)
         window = win
