@@ -124,11 +124,16 @@ final class TerminalPage: NSView {
         addFields.setViews([newNameField, newCommandField], in: .leading)
         let addCard = CardView(rows: [PageKit.row(left: addFields, controls: [addButton])])
 
+        // The colours are opened from a row in the kitty settings below, not from the card.
         let editColors = NSButton(title: "Edit colours", target: self, action: #selector(openColors(_:)))
         editColors.bezelStyle = .rounded
         editColors.controlSize = .small
+        let colourCard = CardView(rows: [
+            PageKit.settingRow("Colours", "Interface colours and the 16-colour terminal palette.", [editColors],
+                               symbol: "paintpalette"),
+        ])
         let kitty = AppCard(name: "kitty", detail: "GPU-accelerated terminal with splits",
-                            appIcon: Self.kittyIcon(), symbol: "terminal", button: editColors)
+                            appIcon: Self.kittyIcon(), symbol: "terminal")
         let fish = AppCard(name: "fish", detail: "Friendly shell with suggestions and colors",
                            appIcon: nil, symbol: "chevron.right.circle")
         kitty.onClick = { [weak self] in self?.shell?.selectTab(0) }
@@ -148,6 +153,9 @@ final class TerminalPage: NSView {
                         PageKit.section("Font and window",
                                         "kitty.conf. To see changes, reload the kitty config: ctrl+cmd+, or kill -SIGUSR1 <kitty pid>.",
                                         [kittySettings]),
+                        PageKit.section("Colours",
+                                        "current-theme.conf. Applies after kitty reloads (ctrl+cmd+, or new window).",
+                                        [colourCard]),
                     ]),
             PageTab(name: "fish",
                     subtitle: "~/.config/fish/config.fish",
