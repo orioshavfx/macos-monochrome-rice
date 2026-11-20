@@ -36,6 +36,92 @@ class FillView: NSView {
     }
 }
 
+/// The app's one switch for motion: every animation goes through `animate`, so the system setting
+/// "Reduce motion" turns them all off.
+enum Motion {
+    static var enabled: Bool { !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    /// Runs `changes` in an animation group (`duration`, ease in/out, implicit animation allowed).
+    /// With reduce motion on, the changes are applied at once: a zero-length group, so `animator()`
+    /// calls inside `changes` do not fall back to the default 0.25 s.
+    static func animate(_ duration: TimeInterval = 0.25, _ changes: @escaping () -> Void) {
+        guard enabled else {
+            NSAnimationContext.beginGrouping()
+            NSAnimationContext.current.duration = 0
+            NSAnimationContext.current.allowsImplicitAnimation = false
+            changes()
+            NSAnimationContext.endGrouping()
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = duration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.allowsImplicitAnimation = true
+            changes()
+        }
+    }
+}
+
+/// A fill that never takes mouse clicks: highlights and hover overlays drawn behind a view's content.
+private final class OverlayView: FillView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// Adds a hover overlay (white, about 4%) to `host`, behind its content and inset by `inset`,
+/// and tracks the mouse over `host`. The owner calls `update()` from updateTrackingAreas and
+/// `reset()` when the host moves to another window.
+private final class HoverTracker {
+    private weak var host: NSView?
+    private let overlay = OverlayView()
+    private var area: NSTrackingArea?
+    private var isHovered = false
+
+    init(host: NSView, inset: NSSize, cornerRadius: CGFloat) {
+        self.host = host
+        overlay.fillColor = NSColor.white.withAlphaComponent(0.04)
+        overlay.cornerRadius = cornerRadius
+        overlay.alphaValue = 0
+        overlay.translatesAutoresizingMaskIntoConstraints = false
+        host.addSubview(overlay, positioned: .below, relativeTo: nil)
+        NSLayoutConstraint.activate([
+            overlay.topAnchor.constraint(equalTo: host.topAnchor, constant: inset.height),
+            overlay.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -inset.height),
+            overlay.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: inset.width),
+            overlay.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -inset.width),
+        ])
+    }
+
+    /// Replaces the tracking area with one over the host's current bounds and syncs the hover state
+    /// with where the mouse is now (the bounds change on resize and the row moves when scrolled).
+    func update() {
+        guard let host = host else { return }
+        if let old = area { host.removeTrackingArea(old) }
+        let new = NSTrackingArea(rect: host.bounds, options: [.mouseEnteredAndExited, .activeInActiveApp],
+                                 owner: host, userInfo: nil)
+        host.addTrackingArea(new)
+        area = new
+        if let window = host.window, NSApp.isActive {
+            let point = host.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+            setHovered(!host.isHiddenOrHasHiddenAncestor && host.bounds.contains(point))
+        } else {
+            setHovered(false)
+        }
+    }
+
+    func setHovered(_ hovered: Bool) {
+        guard hovered != isHovered else { return }
+        isHovered = hovered
+        let overlay = self.overlay
+        Motion.animate(0.2) { overlay.animator().alphaValue = hovered ? 1 : 0 }
+    }
+
+    /// Clears the hover at once (no animation), e.g. when the page holding the row is taken off screen.
+    func reset() {
+        isHovered = false
+        overlay.alphaValue = 0
+    }
+}
+
 /// A horizontal 1 pt line in the separator colour, inset from both sides.
 final class Hairline: NSView {
     var inset: CGFloat = 16 { didSet { needsDisplay = true } }
@@ -54,8 +140,12 @@ final class Hairline: NSView {
 /// The selected row gets a light fill; the rows of a group sit on one card (see RiceSidebar).
 final class SidebarItem: FillView {
     var onClick: (() -> Void)?
-    var isSelected = false { didSet { restyle() } }
+    /// A change of selection fades the highlight out of the old row and into the new one.
+    var isSelected = false { didSet { if isSelected != oldValue { restyle(animated: true) } } }
 
+    /// The selected-row fill, faded in and out instead of switching the row's own fill.
+    private let highlight = OverlayView()
+    private var hover: HoverTracker?
     private let iconTile = FillView()
     private let imageView = NSImageView()
     private let titleLabel: NSTextField
@@ -86,6 +176,20 @@ final class SidebarItem: FillView {
         texts.spacing = 1
         texts.setViews([titleLabel, detailLabel], in: .top)
 
+        highlight.fillColor = Theme.selectedFill
+        highlight.cornerRadius = 10
+        highlight.alphaValue = 0
+        highlight.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(highlight)
+        NSLayoutConstraint.activate([
+            highlight.topAnchor.constraint(equalTo: topAnchor),
+            highlight.bottomAnchor.constraint(equalTo: bottomAnchor),
+            highlight.leadingAnchor.constraint(equalTo: leadingAnchor),
+            highlight.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+        // The hover overlay goes under the highlight (it is put below all subviews).
+        hover = HoverTracker(host: self, inset: .zero, cornerRadius: 10)
+
         for view in [iconTile, imageView, texts] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
@@ -109,7 +213,7 @@ final class SidebarItem: FillView {
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         setAccessibilityLabel(title)
-        restyle()
+        restyle(animated: false)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -119,8 +223,15 @@ final class SidebarItem: FillView {
         titleLabel.stringValue.lowercased().contains(query) || detailLabel.stringValue.lowercased().contains(query)
     }
 
-    private func restyle() {
-        fillColor = isSelected ? Theme.selectedFill : .clear
+    private func restyle(animated: Bool) {
+        fillColor = .clear
+        let alpha: CGFloat = isSelected ? 1 : 0
+        if animated && window != nil {
+            let highlight = self.highlight
+            Motion.animate(0.22) { highlight.animator().alphaValue = alpha }
+        } else {
+            highlight.alphaValue = alpha
+        }
         iconTile.fillColor = isSelected ? Theme.accent : Theme.controlFill
         imageView.contentTintColor = isSelected ? Theme.onAccent : .labelColor
         titleLabel.textColor = .labelColor
@@ -134,6 +245,20 @@ final class SidebarItem: FillView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) { onClick?() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        hover?.update()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        hover?.reset()
+    }
+
+    override func mouseEntered(with event: NSEvent) { hover?.setHovered(true) }
+
+    override func mouseExited(with event: NSEvent) { hover?.setHovered(false) }
 
     override func accessibilityPerformPress() -> Bool {
         onClick?()
@@ -286,10 +411,15 @@ private final class SegmentItem: FillView {
 final class CapsuleSegments: FillView {
     weak var target: AnyObject?
     var action: Selector?
-    var selectedSegment: Int = -1 { didSet { restyle() } }
-    var isEnabled = true { didSet { restyle() } }
+    var selectedSegment: Int = -1 { didSet { restyle(animated: true) } }
+    var isEnabled = true { didSet { restyle(animated: false) } }
 
     private var items: [SegmentItem] = []
+    /// The accent capsule under the selected segment. It is pinned to that segment's edges and slides
+    /// to the new one when the selection changes; hidden (alpha 0) when nothing is selected.
+    private let pill = OverlayView()
+    private var pillConstraints: [NSLayoutConstraint] = []
+    private var pillShown = false
 
     init(labels: [String]) {
         super.init(frame: .zero)
@@ -305,6 +435,11 @@ final class CapsuleSegments: FillView {
         stack.spacing = 2
         stack.setViews(items, in: .leading)
         stack.translatesAutoresizingMaskIntoConstraints = false
+        pill.fillColor = Theme.accent
+        pill.cornerRadius = 12
+        pill.alphaValue = 0
+        pill.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(pill)  // under the stack, so the labels are drawn over it
         addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: topAnchor, constant: 2),
@@ -312,9 +447,10 @@ final class CapsuleSegments: FillView {
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
         ])
+        if let first = items.first { pinPill(to: first) }
         setContentHuggingPriority(.required, for: .horizontal)
         setContentCompressionResistancePriority(.required, for: .horizontal)
-        restyle()
+        restyle(animated: false)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -327,18 +463,78 @@ final class CapsuleSegments: FillView {
         }
     }
 
-    private func restyle() {
+    private func restyle(animated: Bool) {
         for (i, item) in items.enumerated() {
             let on = i == selectedSegment
-            item.fillColor = on ? Theme.accent : .clear
+            item.fillColor = .clear
             item.label.textColor = on ? Theme.onAccent : .labelColor
             item.label.stringValue = on ? "✓ \(item.title)" : item.title
         }
         alphaValue = isEnabled ? 1 : 0.4
+
+        let wasShown = pillShown
+        pillShown = items.indices.contains(selectedSegment)
+        if pillShown { pinPill(to: items[selectedSegment]) }
+        let pill = self.pill
+        let alpha: CGFloat = pillShown ? 1 : 0
+        guard animated, window != nil else {
+            pill.alphaValue = alpha
+            return
+        }
+        if wasShown && pillShown {
+            // Slide: the new constraints are laid out inside the animation group, so the pill's frame
+            // (and the segments, whose widths change with the ✓) move there over the duration.
+            needsLayout = true
+            Motion.animate(0.25) { [weak self] in self?.layoutSubtreeIfNeeded() }
+        } else {
+            // Appearing or disappearing: put the pill in place first, then only fade it.
+            layoutSubtreeIfNeeded()
+            Motion.animate(0.2) { pill.animator().alphaValue = alpha }
+        }
+    }
+
+    /// Pins the pill to the edges of `item` (replacing its previous constraints).
+    private func pinPill(to item: SegmentItem) {
+        NSLayoutConstraint.deactivate(pillConstraints)
+        pillConstraints = [
+            pill.topAnchor.constraint(equalTo: item.topAnchor),
+            pill.bottomAnchor.constraint(equalTo: item.bottomAnchor),
+            pill.leadingAnchor.constraint(equalTo: item.leadingAnchor),
+            pill.trailingAnchor.constraint(equalTo: item.trailingAnchor),
+        ]
+        NSLayoutConstraint.activate(pillConstraints)
     }
 }
 
 // MARK: - Cards
+
+/// The background of a card row (PageKit.row): it brightens slightly while the mouse is over it.
+/// Only the background reacts; the row's controls handle their own mouse events as before.
+private final class HoverRowView: NSView {
+    private var hover: HoverTracker?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        // Inset inside the card, so the overlay's corners stay within the card's rounded corners.
+        hover = HoverTracker(host: self, inset: NSSize(width: 4, height: 2), cornerRadius: 8)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        hover?.update()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        hover?.reset()
+    }
+
+    override func mouseEntered(with event: NSEvent) { hover?.setHovered(true) }
+
+    override func mouseExited(with event: NSEvent) { hover?.setHovered(false) }
+}
 
 /// A rounded card holding rows one under the other, separated by thin lines.
 final class CardView: FillView {
@@ -506,6 +702,7 @@ final class ToggleView: NSView {
         didSet {
             needsDisplay = true
             setAccessibilityValue(state == .on ? 1 : 0)
+            moveKnob(animated: state != oldValue)
         }
     }
     var isOn: Bool {
@@ -521,8 +718,15 @@ final class ToggleView: NSView {
 
     private static let size = NSSize(width: 38, height: 22)
 
+    /// The white knob, a subview so it can slide between the off and on positions.
+    private let knob = ToggleKnob()
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        wantsLayer = true
+        knob.wantsLayer = true
+        addSubview(knob)
+        knob.frame = knobFrame()
         setContentHuggingPriority(.required, for: .horizontal)
         setContentHuggingPriority(.required, for: .vertical)
         setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -535,21 +739,42 @@ final class ToggleView: NSView {
 
     override var intrinsicContentSize: NSSize { Self.size }
 
+    private var track: NSRect {
+        NSRect(x: (bounds.width - Self.size.width) / 2, y: (bounds.height - Self.size.height) / 2,
+               width: Self.size.width, height: Self.size.height)
+    }
+
+    /// The knob's frame for the current state: the knob circle plus `ToggleKnob.ring` on every side,
+    /// so its ring is not clipped.
+    private func knobFrame() -> NSRect {
+        let track = self.track
+        let d = track.height - 4
+        let circle = NSRect(x: isOn ? track.maxX - 2 - d : track.minX + 2, y: track.minY + 2, width: d, height: d)
+        return circle.insetBy(dx: -ToggleKnob.ring, dy: -ToggleKnob.ring)
+    }
+
+    private func moveKnob(animated: Bool) {
+        let frame = knobFrame()
+        guard animated, window != nil else {
+            knob.frame = frame
+            return
+        }
+        let knob = self.knob
+        Motion.animate(0.2) { knob.animator().frame = frame }
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let oldSize = frame.size
+        super.setFrameSize(newSize)
+        // Re-placed only on a real size change, so a layout pass does not cut a running slide short.
+        if newSize != oldSize { knob.frame = knobFrame() }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        let track = NSRect(x: (bounds.width - Self.size.width) / 2, y: (bounds.height - Self.size.height) / 2,
-                           width: Self.size.width, height: Self.size.height)
+        let track = self.track
         (isOn ? Theme.accent : Theme.toggleOffFill).setFill()
         NSBezierPath(roundedRect: track, xRadius: track.height / 2, yRadius: track.height / 2).fill()
-
-        let d = track.height - 4
-        let knob = NSRect(x: isOn ? track.maxX - 2 - d : track.minX + 2, y: track.minY + 2, width: d, height: d)
-        let knobPath = NSBezierPath(ovalIn: knob)
-        NSColor.white.setFill()
-        knobPath.fill()
-        // A thin ring keeps the white knob visible on a white (or very light) accent.
-        NSColor.black.withAlphaComponent(0.25).setStroke()
-        knobPath.lineWidth = 0.75
-        knobPath.stroke()
+        // The knob is drawn by its own subview (ToggleKnob).
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -568,6 +793,24 @@ final class ToggleView: NSView {
             _ = NSApp.sendAction(action, to: target, from: self)
         }
     }
+}
+
+/// The knob of a ToggleView: a white circle with a thin ring, drawn `ring` points inside its bounds.
+/// Clicks go through to the toggle.
+private final class ToggleKnob: NSView {
+    static let ring: CGFloat = 1
+
+    override func draw(_ dirtyRect: NSRect) {
+        let knobPath = NSBezierPath(ovalIn: bounds.insetBy(dx: Self.ring, dy: Self.ring))
+        NSColor.white.setFill()
+        knobPath.fill()
+        // A thin ring keeps the white knob visible on a white (or very light) accent.
+        NSColor.black.withAlphaComponent(0.25).setStroke()
+        knobPath.lineWidth = 0.75
+        knobPath.stroke()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 // MARK: - Drawer
@@ -1008,7 +1251,7 @@ enum PageKit {
     /// A card row with any view on the left and `controls` on the right; at least 52 pt high,
     /// 16 pt side padding. The left view takes the width the controls leave.
     static func row(left: NSView, controls: [NSView]) -> NSView {
-        let row = NSView()
+        let row = HoverRowView()
         let right = NSStackView()
         right.orientation = .horizontal
         right.alignment = .centerY

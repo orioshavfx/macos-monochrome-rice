@@ -115,6 +115,44 @@ enum KittyConf {
         try file.writeLines(lines)
         return true
     }
+
+    // MARK: font_family
+
+    /// `family='NAME'`, `family="NAME"` or `family=NAME` inside a font_family value (kitty 0.36+ form,
+    /// e.g. `family='Hasklug Nerd Font' postscript_name=HasklugNerdFont-Regular`).
+    /// Groups: 1 the whole `family=...` part, 2 single-quoted, 3 double-quoted, 4 unquoted name.
+    private static let familyPattern = regex("(?:^|\\s)(family=(?:'([^']*)'|\"([^\"]*)\"|(\\S+)))")
+
+    /// The family name shown in the UI: the value of family=... when present, otherwise the whole value
+    /// (the plain `font_family JetBrains Mono` form).
+    static func fontFamilyName(fromValue raw: String) -> String {
+        let value = raw.trimmingCharacters(in: .whitespaces)
+        guard let g = groups(familyPattern, value) else { return value }
+        return (g[2] ?? g[3] ?? g[4] ?? value).trimmingCharacters(in: .whitespaces)
+    }
+
+    /// The font_family value with only the family name replaced by `name`; every other part of `raw`
+    /// (postscript_name=..., style=..., features) is kept as it is. A plain value is replaced whole.
+    static func fontFamilyValue(replacingNameIn raw: String, with name: String) throws -> String {
+        let n = name.trimmingCharacters(in: .whitespaces)
+        guard !n.isEmpty, !n.contains("\n"), !n.contains("\r") else { throw ConfigFileError.badValue(name) }
+        let value = raw.trimmingCharacters(in: .whitespaces)
+        let re = familyPattern
+        let ns = value as NSString
+        guard let m = re.firstMatch(in: value, range: NSRange(location: 0, length: ns.length)),
+              m.range(at: 1).location != NSNotFound else {
+            return n
+        }
+        let quoted: String
+        if !n.contains("'") {
+            quoted = "'" + n + "'"
+        } else if !n.contains("\"") {
+            quoted = "\"" + n + "\""
+        } else {
+            throw ConfigFileError.rejected("A font name with both ' and \" cannot be written to kitty.conf.")
+        }
+        return ns.replacingCharacters(in: m.range(at: 1), with: "family=" + quoted)
+    }
 }
 
 // MARK: - kitty theme colours

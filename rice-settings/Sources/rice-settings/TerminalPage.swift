@@ -58,6 +58,10 @@ final class TerminalPage: NSView {
     /// The kitty colours (current-theme.conf), opened with "Edit colours" on the kitty card.
     private var colorDrawer: DrawerView?
 
+    /// The font_family value as it is in kitty.conf now (e.g. `family='X' postscript_name=Y`);
+    /// the Font field shows only the family name, and a change rewrites only that part.
+    private var fontRaw: String?
+
     private var colorWells: [String: ColorWell] = [:]
     private var colorHexLabels: [String: NSTextField] = [:]
     /// Hex digits (without "#") as they are in current-theme.conf now; a key without an active line is absent.
@@ -94,10 +98,11 @@ final class TerminalPage: NSView {
         cursorControl.action = #selector(kittyChanged(_:))
 
         let kittySettings = CardView(rows: [
-            PageKit.settingRow("Font size", "font_size", [sizeSlider, sizeValue]),
-            PageKit.settingRow("Font", "font_family", [fontField]),
-            PageKit.settingRow("Background opacity", "background_opacity", [opacitySlider, opacityValue]),
-            PageKit.settingRow("Cursor shape", "cursor_shape", [cursorControl]),
+            PageKit.settingRow("Font size", "font_size", [sizeSlider, sizeValue], symbol: "textformat.size"),
+            PageKit.settingRow("Font", "font_family", [fontField], symbol: "textformat"),
+            PageKit.settingRow("Background opacity", "background_opacity", [opacitySlider, opacityValue],
+                               symbol: "circle.lefthalf.filled"),
+            PageKit.settingRow("Cursor shape", "cursor_shape", [cursorControl], symbol: "character.cursor.ibeam"),
         ])
         let interfaceCard = CardView(rows: Self.interfaceColorKeys.map { colorRow($0) })
         let paletteCard = CardView(rows: Self.paletteColorKeys.map { colorRow($0) })
@@ -134,7 +139,7 @@ final class TerminalPage: NSView {
         ])
         let kitty = AppCard(name: "kitty", detail: "GPU-accelerated terminal with splits",
                             appIcon: Self.kittyIcon(), symbol: "terminal")
-        let fish = AppCard(name: "fish", detail: "Friendly shell with suggestions and colors",
+        let fish = AppCard(name: "fish", detail: "Friendly shell with suggestions and colours",
                            appIcon: nil, symbol: "chevron.right.circle")
         kitty.onClick = { [weak self] in self?.shell?.selectTab(0) }
         fish.onClick = { [weak self] in self?.shell?.selectTab(1) }
@@ -173,12 +178,13 @@ final class TerminalPage: NSView {
             title: "kitty colours",
             subtitle: "~/.config/kitty/current-theme.conf. Applies after kitty reloads (ctrl+cmd+, or new window).",
             sections: [
-                PageKit.section("Interface colors", "", [interfaceCard]),
-                PageKit.section("Terminal palette", "The 16 terminal colors.", [paletteCard]),
+                PageKit.section("Interface colours", "", [interfaceCard]),
+                PageKit.section("Terminal palette", "The 16 terminal colours.", [paletteCard]),
             ])
 
         // The kitty and fish cards are the only switch between the two parts of the page.
-        let page = TabbedPageView(title: "Terminal", tabs: tabs, accessory: cards, status: status, showsTabBar: false)
+        let page = TabbedPageView(title: "Terminal", tabs: tabs, accessory: cards, status: status, showsTabBar: false,
+                                 kicker: "kitty · fish")
         page.onSelect = { [weak self] index in
             self?.kittyCard?.isSelected = index == 0
             self?.fishCard?.isSelected = index == 1
@@ -272,7 +278,10 @@ final class TerminalPage: NSView {
         }
 
         if let v = KittyConf.read("font_family", in: lines)?.value {
-            fontField.stringValue = v
+            fontRaw = v
+            let name = KittyConf.fontFamilyName(fromValue: v)
+            fontField.stringValue = name
+            fontField.toolTip = v
         } else {
             fontField.isEnabled = false
             fontField.placeholderString = "not found"
@@ -388,8 +397,21 @@ final class TerminalPage: NSView {
                 status.stringValue = "An empty font name is not saved."
                 return
             }
+            guard let raw = fontRaw else { return }
+            let current = KittyConf.fontFamilyName(fromValue: raw)
+            if v == current {
+                // Unchanged: the line in kitty.conf is not rewritten.
+                f.stringValue = current
+                return
+            }
+            do {
+                value = try KittyConf.fontFamilyValue(replacingNameIn: raw, with: v)
+            } catch {
+                f.stringValue = current
+                status.stringValue = "Could not save font_family: \(error.localizedDescription)"
+                return
+            }
             key = "font_family"
-            value = v
         } else if let c = sender as? CapsuleSegments, c === cursorControl {
             let i = c.selectedSegment
             guard Self.cursorShapes.indices.contains(i) else { return }
@@ -401,6 +423,11 @@ final class TerminalPage: NSView {
         do {
             if try KittyConf.write(key, value) {
                 status.stringValue = "Saved: \(key) \(value) in ~/.config/kitty/kitty.conf"
+            }
+            if key == "font_family" {
+                fontRaw = value
+                fontField.stringValue = KittyConf.fontFamilyName(fromValue: value)
+                fontField.toolTip = value
             }
         } catch {
             status.stringValue = "Could not save \(key): \(error.localizedDescription)"

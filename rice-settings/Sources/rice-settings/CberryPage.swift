@@ -79,20 +79,23 @@ final class CberryPage: NSView {
         borderWell.heightAnchor.constraint(equalToConstant: 24).isActive = true
 
         let spacingCard = CardView(rows: [
-            row("Gap between windows", "gap", "gap", [gapField]),
+            row("Gap between windows", "gap", "gap", [gapField], symbol: "square.grid.2x2"),
             row("Padding from screen edges",
                 "padding: 1, 2 (vertical horizontal) or 4 (top right bottom left) numbers",
-                "padding", [paddingField]),
-            row("First window share on split", "split_ratio", "split_ratio", [splitSlider, splitValue]),
-            row("Resize step", "resize_step", "resize_step", [stepSlider, stepValue]),
+                "padding", [paddingField], symbol: "rectangle.dashed"),
+            row("First window share on split", "split_ratio", "split_ratio", [splitSlider, splitValue],
+                symbol: "rectangle.split.2x1"),
+            row("Resize step", "resize_step", "resize_step", [stepSlider, stepValue],
+                symbol: "arrow.up.left.and.arrow.down.right"),
         ])
         let borderCard = CardView(rows: [
-            row("Border around the active window", "border", "border", [borderControl]),
-            row("Border color", "border_color", "border_color", [borderWell, borderHex]),
+            row("Border around the active window", "border", "border", [borderControl], symbol: "square"),
+            row("Border colour", "border_color", "border_color", [borderWell, borderHex], symbol: "paintpalette"),
         ])
         let mouseCard = CardView(rows: [
-            row("Focus follows mouse", "focus_follows_mouse", "focus_follows_mouse", [focusControl]),
-            row("Mouse modifier key", "mouse_modifier", "mouse_modifier", [modifierControl]),
+            row("Focus follows mouse", "focus_follows_mouse", "focus_follows_mouse", [focusControl],
+                symbol: "cursorarrow"),
+            row("Mouse modifier key", "mouse_modifier", "mouse_modifier", [modifierControl], symbol: "option"),
         ])
         buildBindRows()
 
@@ -104,8 +107,8 @@ final class CberryPage: NSView {
                                         "Only the value in an existing cberry config line is changed; if there is no line, "
                                             + "the setting is not set and is not appended. After saving, cberry reload is run.",
                                         [spacingCard]),
-                        PageKit.section("Border", "", [borderCard]),
-                        PageKit.section("Mouse", "", [mouseCard]),
+                        PageKit.section("Border", "The frame around the focused window.", [borderCard]),
+                        PageKit.section("Mouse", "Focus and the modifier key for mouse actions.", [mouseCard]),
                     ]),
             PageTab(name: "Keys",
                     subtitle: "~/.config/cranberry/cberryrc (cberry bind lines)",
@@ -116,7 +119,8 @@ final class CberryPage: NSView {
                                         [bindCard]),
                     ]),
         ]
-        PageKit.embed(TabbedPageView(title: "WM (Cranberry)", tabs: tabs, status: status), in: self)
+        PageKit.embed(TabbedPageView(title: "WM (Cranberry)", tabs: tabs, status: status, kicker: "Cranberry · cberry"),
+                      in: self)
     }
 
     /// One row per bind: the description and the command on the left, the combo field and Record on the right.
@@ -142,13 +146,14 @@ final class CberryPage: NSView {
             bindFields.append(field)
             bindButtons.append(button)
             let detail = NSTextField(wrappingLabelWithString: bind.command)
-            let row = PageKit.settingRow(Self.describe(bind.command), "", [field, button], detailLabel: detail)
+            let row = PageKit.settingRow(Self.describe(bind.command), "", [field, button], detailLabel: detail,
+                                         symbol: "keyboard")
             detail.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
             views.append(row)
         }
         for other in otherBinds {
             let detail = NSTextField(wrappingLabelWithString: other)
-            let row = PageKit.settingRow("Not editable", "", [], detailLabel: detail)
+            let row = PageKit.settingRow("Not editable", "", [], detailLabel: detail, symbol: "lock")
             detail.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
             views.append(row)
         }
@@ -186,12 +191,15 @@ final class CberryPage: NSView {
         return fixed[words.joined(separator: " ")] ?? command
     }
 
-    /// A settings row; when the key has no active line in the file the controls are replaced with "not set".
-    private func row(_ title: String, _ detail: String, _ key: String, _ controls: [NSView]) -> NSView {
+    /// A settings row with an SF Symbol tile; when the key has no active line in the file the controls are
+    /// replaced with "not set".
+    private func row(_ title: String, _ detail: String, _ key: String, _ controls: [NSView],
+                     symbol: String? = nil) -> NSView {
         if values[key] == nil {
-            return PageKit.settingRow(title, detail, [PageKit.placeholder(readError == nil ? "not set" : "—")])
+            return PageKit.settingRow(title, detail, [PageKit.placeholder(readError == nil ? "not set" : "—")],
+                                      symbol: symbol)
         }
-        return PageKit.settingRow(title, detail, controls)
+        return PageKit.settingRow(title, detail, controls, symbol: symbol)
     }
 
     // MARK: - Reading

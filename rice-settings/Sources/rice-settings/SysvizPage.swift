@@ -58,25 +58,26 @@ final class SysvizPage: NSView {
         }
 
         let barsCard = CardView(rows: [
-            PageKit.settingRow("Number of bars", "bars", [barsSlider, barsValue]),
-            PageKit.settingRow("Gap between bars", "bar_gap", [gapSlider, gapValue]),
-            PageKit.settingRow("Refresh rate", "framerate, frames per second", [fpsSlider, fpsValue]),
+            PageKit.settingRow("Number of bars", "bars", [barsSlider, barsValue], symbol: "chart.bar"),
+            PageKit.settingRow("Gap between bars", "bar_gap", [gapSlider, gapValue], symbol: "arrow.left.and.right"),
+            PageKit.settingRow("Refresh rate", "framerate, frames per second", [fpsSlider, fpsValue],
+                               symbol: "speedometer"),
         ])
         let colorCard = CardView(rows: [
-            PageKit.settingRow("Bar color", "color_mode", [modeControl]),
-            PageKit.settingRow("Colors", "", [gradientRow, soloRow], detailLabel: colorDetail),
+            PageKit.settingRow("Bar colour", "color_mode", [modeControl], symbol: "circle.lefthalf.filled"),
+            PageKit.settingRow("Colours", "", [gradientRow, soloRow], detailLabel: colorDetail, symbol: "paintpalette"),
         ])
         let subtitle = "~/.config/sysviz/config.toml"
         let tabs = [
             PageTab(name: "Bars", subtitle: subtitle, sections: [
                 PageKit.section("Bars", "Every change is saved to the file at once. sysviz reads the file when it starts, so restart it to apply.", [barsCard]),
             ]),
-            PageTab(name: "Colors", subtitle: subtitle, sections: [
-                PageKit.section("Colors", "Solid uses one color; a gradient goes from the bottom color to the top color.",
+            PageTab(name: "Colours", subtitle: subtitle, sections: [
+                PageKit.section("Colours", "Solid uses one colour; a gradient goes from the bottom colour to the top colour.",
                                 [colorCard]),
             ]),
         ]
-        PageKit.embed(TabbedPageView(title: "sysviz", tabs: tabs, status: status), in: self)
+        PageKit.embed(TabbedPageView(title: "sysviz", tabs: tabs, status: status, kicker: "Audio visualiser"), in: self)
     }
 
     private func apply(_ c: SysvizConfig) {

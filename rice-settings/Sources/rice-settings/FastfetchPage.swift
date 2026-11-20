@@ -40,12 +40,12 @@ final class FastfetchPage: NSView {
         let startupCard = CardView(rows: [
             PageKit.settingRow("Show fastfetch when a fish shell starts",
                                "Off = the line is commented out as # fastfetch; it is never deleted.",
-                               [fastfetchSwitch]),
+                               [fastfetchSwitch], symbol: "power"),
         ])
         let configCard = CardView(rows: [
             PageKit.settingRow("fastfetch config",
                                "Opens ~/" + Self.configPath + " in its default app. If the file does not exist, it is not created.",
-                               [openButton]),
+                               [openButton], symbol: "doc.text"),
         ])
         let modulesCard = CardView(rows: [buildModuleGrid()])
         modulesDrawer = DrawerView(title: "Info lines", subtitle: "~/" + Self.configPath + " (the \"modules\" array)",
@@ -53,7 +53,7 @@ final class FastfetchPage: NSView {
         let editButton = NSButton(title: "Edit info lines", target: self, action: #selector(openModules(_:)))
         editButton.bezelStyle = .rounded
         let infoCard = CardView(rows: [
-            PageKit.settingRow("Info lines", "", [editButton], detailLabel: modulesNote),
+            PageKit.settingRow("Info lines", "", [editButton], detailLabel: modulesNote, symbol: "text.alignleft"),
         ])
 
         let tabs = [
@@ -64,10 +64,10 @@ final class FastfetchPage: NSView {
                     subtitle: "~/.config/fish/config.fish and ~/" + Self.configPath,
                     sections: [
                         PageKit.section("Start-up", "The fastfetch line in the if status is-interactive block.", [startupCard]),
-                        PageKit.section("Config file", "", [configCard]),
+                        PageKit.section("Config file", "The whole config.jsonc, opened in its default app.", [configCard]),
                     ]),
         ]
-        PageKit.embed(TabbedPageView(title: "fastfetch", tabs: tabs, status: status), in: self)
+        PageKit.embed(TabbedPageView(title: "fastfetch", tabs: tabs, status: status, kicker: "System info lines"), in: self)
     }
 
     /// One checkbox per module, one under the other in fastfetch's order, with card padding.

@@ -168,7 +168,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard pages.indices.contains(index) else { return }
         for (i, item) in items.enumerated() { item.isSelected = i == index }
         content.subviews.forEach { $0.removeFromSuperview() }
-        PageKit.embed(pages[index], in: content)
+
+        // The new page fades in and slides up 6 pt into place. It is pinned like PageKit.embed, with the
+        // top and bottom first offset by `rise`; the old page is already gone, so nothing flickers.
+        let page = pages[index]
+        let rise: CGFloat = 6
+        page.wantsLayer = true
+        page.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(page)
+        let top = page.topAnchor.constraint(equalTo: content.topAnchor, constant: rise)
+        let bottom = page.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: rise)
+        NSLayoutConstraint.activate([
+            top,
+            bottom,
+            page.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            page.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+        ])
+        page.alphaValue = 0
+        content.layoutSubtreeIfNeeded()
+        Motion.animate(0.25) {
+            top.animator().constant = 0
+            bottom.animator().constant = 0
+            page.animator().alphaValue = 1
+        }
     }
 }
 
