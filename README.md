@@ -64,7 +64,7 @@ Existing files that differ are saved first as `<file>.bak-<timestamp>`. Nothing 
 
 On first use macOS also asks to let your terminal capture system audio (sysviz) and control Music (musicplayer). The lyrics view sends the track title and artist to [lrclib.net](https://lrclib.net).
 
-Wallpapers: put images in `~/Pictures/Wallpapers` (created on first use). The first time you set a picture, macOS asks to let `wallpicker` control System Events; allow it under Privacy & Security > Automation.
+Wallpapers: put images in `~/Pictures/Wallpapers` (created on first use). Return writes the picture into macOS's wallpaper store for every display and Space. Before each change the store is copied to `~/.local/state/monochrome-macos-rice/wallpaper-backup`, and WallpaperAgent is restarted. If macOS refuses the write, allow `wallpicker` under Privacy & Security > Full Disk Access.
 
 ## Rice Settings
 

@@ -3,14 +3,19 @@ import ImageIO
 import QuartzCore
 
 // wallpicker: a full-screen carousel of the pictures in ~/Pictures/Wallpapers.
-// Left and Right move through them, Return sets the picture on every display
-// and every Space, Escape closes without changing anything.
+// Left and Right move through them. Return writes the picture into the macOS
+// wallpaper store for every display and every Space, then restarts
+// WallpaperAgent. Escape closes without changing anything.
 
 /// Previews and backdrop in greys, to match the monochrome rice. Set to false for colour.
 let greyscale = true
 
-let picturesFolder = FileManager.default.homeDirectoryForCurrentUser
-    .appendingPathComponent("Pictures/Wallpapers", isDirectory: true)
+let homeFolder = FileManager.default.homeDirectoryForCurrentUser
+let picturesFolder = homeFolder.appendingPathComponent("Pictures/Wallpapers", isDirectory: true)
+let wallpaperStore = homeFolder.appendingPathComponent(
+    "Library/Application Support/com.apple.wallpaper/Store/Index.plist")
+let backupFolder = homeFolder.appendingPathComponent(".local/state/monochrome-macos-rice/wallpaper-backup", isDirectory: true)
+let imageProvider = "com.apple.wallpaper.choice.image"
 let pictureTypes: Set<String> = ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff", "webp", "bmp"]
 
 func wallpaperFiles() -> [URL] {
@@ -40,27 +45,74 @@ func loadPicture(_ url: URL, maxSize: Int) -> CGImage? {
     return ctx.makeImage() ?? image
 }
 
-/// Sets the picture on every display, then on every Space through System Events.
-/// Returns false when System Events refuses (no Automation permission yet).
-func applyWallpaper(_ url: URL) -> Bool {
-    for screen in NSScreen.screens {
-        try? NSWorkspace.shared.setDesktopImageURL(url, for: screen, options: [:])
+enum StoreError: Error, CustomStringConvertible {
+    case unreadable(String)
+
+    var description: String {
+        switch self {
+        case .unreadable(let why): return why
+        }
     }
-    let script = """
-        on run argv
-            tell application "System Events" to tell every desktop to set picture to (item 1 of argv)
-        end run
-        """
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-    process.arguments = ["-e", script, url.path]
-    do {
-        try process.run()
-        process.waitUntilExit()
-        return process.terminationStatus == 0
-    } catch {
-        return false
+}
+
+/// Points every image choice in the store at `url`. Each choice keeps its
+/// other settings. Returns the new tree and how many choices changed.
+func pointImageChoices(_ node: Any, at url: String, changed: inout Int) -> Any {
+    if var dict = node as? [String: Any] {
+        if let choices = dict["Choices"] as? [[String: Any]] {
+            dict["Choices"] = choices.map { choice -> [String: Any] in
+                var choice = choice
+                guard (choice["Provider"] as? String) == imageProvider,
+                      let blob = choice["Configuration"] as? Data,
+                      var configuration = (try? PropertyListSerialization.propertyList(from: blob, options: [], format: nil)) as? [String: Any],
+                      var image = configuration["url"] as? [String: Any]
+                else { return choice }
+                image["relative"] = url
+                configuration["url"] = image
+                guard let newBlob = try? PropertyListSerialization.data(fromPropertyList: configuration, format: .binary, options: 0) else {
+                    return choice
+                }
+                choice["Configuration"] = newBlob
+                changed += 1
+                return choice
+            }
+        }
+        for (key, value) in dict where key != "Choices" {
+            dict[key] = pointImageChoices(value, at: url, changed: &changed)
+        }
+        return dict
     }
+    if let array = node as? [Any] {
+        return array.map { pointImageChoices($0, at: url, changed: &changed) }
+    }
+    return node
+}
+
+/// Writes the picture into the wallpaper store for every Space and display,
+/// keeping a timestamped backup of the store first, then restarts WallpaperAgent.
+func applyWallpaper(_ picture: URL) throws {
+    let data = try Data(contentsOf: wallpaperStore)
+    guard let root = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] else {
+        throw StoreError.unreadable("the wallpaper store is not a dictionary")
+    }
+
+    try FileManager.default.createDirectory(at: backupFolder, withIntermediateDirectories: true)
+    let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+    try FileManager.default.copyItem(at: wallpaperStore, to: backupFolder.appendingPathComponent("Index.plist.\(stamp)"))
+
+    var changed = 0
+    let updated = pointImageChoices(root, at: picture.absoluteString, changed: &changed)
+    guard changed > 0, let updatedRoot = updated as? [String: Any] else {
+        throw StoreError.unreadable("no image choices found in the store")
+    }
+    let out = try PropertyListSerialization.data(fromPropertyList: updatedRoot, format: .binary, options: 0)
+    try out.write(to: wallpaperStore)
+
+    let killall = Process()
+    killall.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+    killall.arguments = ["WallpaperAgent"]
+    try? killall.run()
+    killall.waitUntilExit()
 }
 
 /// A borderless window can only take keys if it says it can become key.
@@ -130,10 +182,10 @@ final class CarouselView: NSView {
 
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
-        case 123: move(-1)           // left arrow
-        case 124: move(1)            // right arrow
-        case 36, 76: apply()         // return, keypad enter
-        case 49: apply()             // space
+        case 123: move(-1)            // left arrow
+        case 124: move(1)             // right arrow
+        case 36, 76: apply()          // return, keypad enter
+        case 49: apply()              // space
         case 53: NSApp.terminate(nil) // escape
         default: super.keyDown(with: event)
         }
@@ -156,10 +208,11 @@ final class CarouselView: NSView {
 
     private func apply() {
         guard !files.isEmpty else { return }
-        if applyWallpaper(files[index]) {
+        do {
+            try applyWallpaper(files[index])
             NSApp.terminate(nil)
-        } else {
-            caption.string = "Could not set the picture. Allow System Events under Privacy & Security > Automation."
+        } catch {
+            caption.string = "Not changed: \(error)"
         }
     }
 
