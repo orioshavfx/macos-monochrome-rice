@@ -174,6 +174,7 @@ final class CarouselView: NSView {
     private let files: [URL]
     private var index = 0
     private var cards: [CALayer] = []
+    private var labels: [CATextLayer] = []
     private var previews: [CGImage?] = []
     private var backdropCache: [Int: CGImage] = [:]
     private let backdrop = CALayer()
@@ -196,7 +197,7 @@ final class CarouselView: NSView {
         layer?.addSublayer(shade)
 
         previews = files.map { loadPicture($0, maxSize: 900) }
-        for preview in previews {
+        for (i, preview) in previews.enumerated() {
             let card = CALayer()
             card.contentsGravity = .resizeAspectFill
             card.masksToBounds = true
@@ -204,6 +205,17 @@ final class CarouselView: NSView {
             card.contents = preview
             layer?.addSublayer(card)
             cards.append(card)
+
+            let label = CATextLayer()
+            label.string = files[i].lastPathComponent
+            label.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+            label.fontSize = 12
+            label.foregroundColor = NSColor.white.cgColor
+            label.alignmentMode = .center
+            label.truncationMode = .middle
+            label.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+            layer?.addSublayer(label)
+            labels.append(label)
         }
 
         caption.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
@@ -285,15 +297,24 @@ final class CarouselView: NSView {
             let offset = i - index
             let distance = CGFloat(abs(offset))
             let scale: CGFloat = offset == 0 ? 1 : max(0.55, 1 - 0.16 * distance)
+            let opacity = offset == 0 ? 1 : Float(max(0.35, 0.85 - 0.2 * Double(distance)))
             card.bounds = CGRect(x: 0, y: 0, width: cardWidth, height: cardHeight)
             card.position = CGPoint(x: bounds.midX + CGFloat(offset) * spacing, y: bounds.midY)
             card.setAffineTransform(CGAffineTransform(a: scale, b: 0, c: lean * scale, d: scale, tx: 0, ty: 0))
-            card.opacity = offset == 0 ? 1 : Float(max(0.35, 0.85 - 0.2 * Double(distance)))
-            card.zPosition = -distance
+            card.opacity = opacity
+            // Above the shade and the backdrop, which sit at zPosition 0.
+            card.zPosition = 100 - distance
             card.borderWidth = offset == 0 ? 2 : 0
+
+            let label = labels[i]
+            label.bounds = CGRect(x: 0, y: 0, width: cardWidth, height: 18)
+            label.position = CGPoint(x: card.position.x, y: card.position.y - cardHeight * scale / 2 - 22)
+            label.opacity = opacity
+            label.zPosition = 100 - distance
         }
 
         caption.frame = CGRect(x: 0, y: 28, width: bounds.width, height: 22)
+        caption.zPosition = 30
         CATransaction.commit()
     }
 }
