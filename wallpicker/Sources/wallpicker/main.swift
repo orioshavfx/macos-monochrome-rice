@@ -288,9 +288,19 @@ final class CarouselView: NSView {
         case 124: move(1)             // right arrow
         case 36, 76: apply()          // return, keypad enter
         case 49: apply()              // space
-        case 53: NSApp.terminate(nil) // escape
+        case 53: close()              // escape
+        case 12: close()              // q
         default: super.keyDown(with: event)
         }
+    }
+
+    /// Escape also reaches the responder chain as cancelOperation(_:) when the text system handles it.
+    override func cancelOperation(_ sender: Any?) {
+        close()
+    }
+
+    private func close() {
+        NSApp.terminate(nil)
     }
 
     private func move(_ step: Int) {
@@ -380,7 +390,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         win.orderFrontRegardless()
         win.makeFirstResponder(view)
         NSApp.activate(ignoringOtherApps: true)
+        win.makeKey()
         window = win
+
+        // Escape closes whichever view has focus: this sees every key press while wallpicker is active.
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 {
+                NSApp.terminate(nil)
+                return nil
+            }
+            return event
+        }
     }
 }
 
